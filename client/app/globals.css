@@ -1,0 +1,299 @@
+@import "tailwindcss";
+
+
+:root {
+  /* Primario — verde Vitalcer */
+  --color-primary: #64b401;
+  --color-primary-hover: #559800;
+  --color-primary-light: rgba(100, 180, 1, 0.12);
+  --color-primary-light-100: rgb(168, 218, 108);
+
+  /* Secundario — marrón cuero */
+  --color-secondary: #846c42;
+  --color-secondary-hover: #6e5a38;
+  --color-secondary-light: rgba(132, 108, 66, 0.12);
+
+  /* Fondos */
+  --color-background: #fafaf5;
+  --color-surface: #ffffff;
+  --color-card: #ffffff;
+
+  /* Texto */
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #5a5a5a;
+  --color-text-muted: #9a9a9a;
+
+  /* Bordes */
+  --color-border: #e5e5e0;
+  --color-border-hover: #d4d0c8;
+
+  /* Tipografías */
+  --font-heading: "Bebas Neue", sans-serif;
+  --font-logo: "Lobster", cursive;
+  --font-body: "Source Sans 3", sans-serif;
+  --font-admin: "DM Sans", sans-serif;
+
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ── Body global ── */
+body {
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: var(--font-body);
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+}
+
+h3 {
+  font-size: 1.25rem;
+}
+
+h4,
+h5,
+h6 {
+  font-family: var(--font-body);
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-primary);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-hover);
+}
+
+::selection {
+  background-color: rgba(100, 180, 1, 0.15);
+  color: var(--color-text-primary);
+}
+
+/* ── Admin: overrides via :has() ── */
+body:has(.admin-root) {
+  background-color: #09090b;
+  color: #f4f4f5;
+  font-family: var(--font-admin);
+}
+
+body:has(.admin-root) h1,
+body:has(.admin-root) h2,
+body:has(.admin-root) h3,
+body:has(.admin-root) h4,
+body:has(.admin-root) h5,
+body:has(.admin-root) h6 {
+  font-family: var(--font-admin);
+}
+
+body:has(.admin-root) ::-webkit-scrollbar-track {
+  background: #18181b;
+}
+body:has(.admin-root) ::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+}
+body:has(.admin-root) ::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+body:has(.admin-root) ::selection {
+  background-color: rgba(6, 182, 212, 0.15);
+  color: #f4f4f5;
+}
+
+/* ── Category card backdrop animation ── */
+.category-card .card-backdrop {
+  background-color: var(--color-background);
+  transform: translateY(0) rotate(-10deg) scale(1.5);
+  transform-origin: center bottom;
+  transition:
+    transform 0.5s ease,
+    background-color 0.5s ease;
+  box-shadow: #09090b 0px 0px 20px 0px;
+}
+
+.category-card .card-title-group {
+  background-color: var(--color-primary-light);
+  transform: rotate(0deg);
+  transform-origin: left center;
+  transition:
+    transform 0.5s ease,
+    background-color 0.5s ease;
+}
+
+.category-card .card-description {
+  opacity: 1;
+  transition: opacity 0.4s ease;
+}
+
+.category-card .card-cta {
+  opacity: 0;
+  background-color: var(--color-primary-light-100);
+  padding: 0.35rem 0.85rem;
+  transition: opacity 0.4s ease;
+}
+
+/* Desktop: hover */
+@media (min-width: 768px) {
+  .category-card:hover .card-backdrop {
+    background-color: var(--color-primary-light-100);
+    transform: translateY(calc(-100% + 45px)) rotate(-10deg) scale(1.5);
+  }
+  .category-card:hover .card-title-group {
+    background-color: transparent;
+    transform: rotate(-10deg) translate(-30px, 8px);
+  }
+  .category-card:hover .card-description {
+    opacity: 0;
+  }
+  .category-card:hover .card-cta {
+    opacity: 1;
+  }
+}
+
+/* Mobile: scroll reveal */
+@media (max-width: 767px) {
+  .category-card.revealed .card-backdrop {
+    background-color: rgb(200, 252, 157);
+    transform: translateY(calc(-100% + 45px)) rotate(-10deg) scale(1.5);
+  }
+  .category-card.revealed .card-title-group {
+    background-color: transparent;
+    transform: rotate(-10deg) translate(-30px, -3px);
+  }
+  .category-card.revealed .card-description {
+    opacity: 0;
+  }
+  .category-card.revealed .card-cta {
+    opacity: 1;
+  }
+}
+
+@layer base {
+  .admin-root button,
+  .admin-root [role="button"],
+  .admin-root a {
+    cursor: pointer;
+  }
+}
+
+/* ── Tiptap Editor (admin) ── */
+.tiptap-editor .tiptap {
+  min-height: 100px;
+  padding: 0.75rem;
+  outline: none;
+  font-size: 0.875rem;
+  color: #e4e4e7;
+}
+
+.tiptap-editor .tiptap p {
+  margin: 0.25rem 0;
+}
+
+.tiptap-editor .tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #52525b;
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+.tiptap-editor .tiptap h2 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #f4f4f5;
+  margin: 0.75rem 0 0.25rem;
+}
+
+.tiptap-editor .tiptap ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin: 0.25rem 0;
+}
+
+.tiptap-editor .tiptap ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+  margin: 0.25rem 0;
+}
+
+.tiptap-editor .tiptap li {
+  margin: 0.125rem 0;
+}
+
+.tiptap-editor .tiptap strong {
+  font-weight: 600;
+  color: #f4f4f5;
+}
+
+.tiptap-editor .tiptap em {
+  font-style: italic;
+}
+
+/* ── Contenido renderizado en store ── */
+.markdown h2 {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+
+.markdown p {
+  margin: 0.5rem 0;
+}
+
+.markdown ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin: 0.5rem 0;
+}
+
+.markdown ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+  margin: 0.5rem 0;
+}
+
+.markdown li {
+  margin: 0.25rem 0;
+  line-height: 1.6;
+}
+
+.markdown strong {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.markdown em {
+  font-style: italic;
+}
+
+.markdown a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown a:hover {
+  color: var(--color-primary-hover);
+}

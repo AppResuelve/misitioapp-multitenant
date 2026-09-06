@@ -1,0 +1,14 @@
+'use client'
+
+interface SkeletonProps {
+  className?: string
+}
+
+export function Skeleton({ className = '' }: SkeletonProps) {
+  return (
+    <div
+      className={`animate-pulse bg-zinc-800 rounded ${className}`}
+      aria-hidden="true"
+    />
+  )
+}
