@@ -1,0 +1,6 @@
+[build]
+  builder = "nixpacks"
+  configPath = "api"
+
+[deploy]
+  startCommand = "npx sequelize-cli db:migrate && node src/index.js"
