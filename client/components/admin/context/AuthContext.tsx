@@ -10,25 +10,14 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    if (!token) {
-      setLoading(false)
-      return
-    }
     api.get('/auth/me')
-      .then(({ data }) => {
-        localStorage.setItem('user', JSON.stringify(data))
-        setUser(data)
-      })
-      .catch(() => {
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-      })
+      .then(({ data }) => setUser(data))
+      .catch(() => setUser(null))
       .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
-    const h = () => { localStorage.removeItem('token'); localStorage.removeItem('user'); setUser(null) }
+    const h = () => setUser(null)
     window.addEventListener('auth:logout', h)
     return () => window.removeEventListener('auth:logout', h)
   }, [])
@@ -36,13 +25,17 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     resetLogoutFlag()
     const { data } = await api.post('/auth/login', { email, password })
-    localStorage.setItem('token', data.token)
-    localStorage.setItem('user', JSON.stringify(data.user))
     setUser(data.user)
     return data.user
   }
 
-  const logout = () => { resetLogoutFlag(); localStorage.removeItem('token'); localStorage.removeItem('user'); setUser(null) }
+  const logout = async () => {
+    resetLogoutFlag()
+    try {
+      await api.post('/auth/logout')
+    } catch {}
+    setUser(null)
+  }
 
   return <AuthCtx.Provider value={{ user, loading, login, logout }}>{children}</AuthCtx.Provider>
 }

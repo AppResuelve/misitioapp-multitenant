@@ -26,11 +26,7 @@ export default function ResetPassword() {
     setError('')
     setLoading(true)
     try {
-      const { data } = await api.post('/auth/reset-password', { token, password })
-      if (data.token) {
-        localStorage.setItem('token', data.token)
-        localStorage.setItem('user', JSON.stringify(data.user))
-      }
+      await api.post('/auth/reset-password', { token, password })
       setDone(true)
       setTimeout(() => router.push('/dashboard'), 1500)
     } catch (err) {

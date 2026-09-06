@@ -12,26 +12,8 @@ export const resetLogoutFlag = () => {
   isLoggingOut = false
 }
 
-api.interceptors.request.use((config) => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-  if (token) config.headers.Authorization = `Bearer ${token}`
-
-  if (typeof window !== 'undefined') {
-    const override = process.env.NEXT_PUBLIC_TENANT_SLUG
-    const slug = override || window.location.host.replace(/^admin\./, '')
-    if (slug) config.headers['X-Tenant-Slug'] = slug
-  }
-  return config
-})
-
 api.interceptors.response.use(
-  (response) => {
-    const newToken = response.headers['x-new-token']
-    if (newToken) {
-      localStorage.setItem('token', newToken)
-    }
-    return response
-  },
+  (response) => response,
   (error) => {
     if (error.response?.status === 401 && !isLoggingOut) {
       isLoggingOut = true
