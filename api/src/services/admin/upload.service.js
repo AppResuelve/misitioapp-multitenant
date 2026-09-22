@@ -2,8 +2,8 @@ const { cloudinary } = require('../../middleware/upload')
 const { Media, Product } = require('../../models')
 const { Op } = require('sequelize')
 
-const uploadImage = async (fileBuffer, filename, folder = 'productos') => {
-  const prefix = process.env.CLOUDINARY_FOLDER_PREFIX || ''
+const uploadImage = async (fileBuffer, filename, folder = 'productos', folderPrefix) => {
+  const prefix = folderPrefix || process.env.CLOUDINARY_FOLDER_PREFIX || ''
   const fullFolder = prefix ? `clients/${prefix}/${folder}` : `clients/${folder}`
 
   return new Promise((resolve, reject) => {
@@ -122,13 +122,13 @@ const emptyTrash = async () => {
   return { deleted: trashed.length }
 }
 
-const moveToFolder = async (id, targetFolder) => {
+const moveToFolder = async (id, targetFolder, folderPrefix) => {
   const media = await Media.findByPk(id)
   if (!media) {
     throw Object.assign(new Error('Imagen no encontrada'), { status: 404 })
   }
 
-  const prefix = process.env.CLOUDINARY_FOLDER_PREFIX || ''
+  const prefix = folderPrefix || process.env.CLOUDINARY_FOLDER_PREFIX || ''
   const oldPublicId = media.publicId
   const basename = oldPublicId.split('/').pop()
   const newPublicId = prefix

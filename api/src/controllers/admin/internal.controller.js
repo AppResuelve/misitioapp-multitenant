@@ -4,6 +4,7 @@ const emailService = require('../../services/email.service')
 const { run } = require('../../services/tenantContext')
 const { ensureDefaults } = require('../../services/store/settings.service')
 const { getStatus, setStatus } = require('../../services/billing.service')
+const { adminOriginFromTenant } = require('../../utils/adminOrigin')
 
 const seedSettings = async (req, res, next) => {
   try {
@@ -137,9 +138,7 @@ const createAdmin = async (req, res, next) => {
       activationSentAt: new Date(),
     })
 
-    const origin = process.env.STORE_FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173'
-    const adminOrigin = origin.replace(/^http:\/\//, '').includes('admin.') ? origin : origin.replace(/^https?:\/\//, 'https://admin.')
-    const link = `${adminOrigin}/activate/${token}`
+    const link = `${adminOriginFromTenant(req.tenant)}/activate/${token}`
 
     await emailService.sendActivationEmail(email, link)
 
@@ -244,9 +243,7 @@ const resendActivation = async (req, res, next) => {
       activationSentAt: now,
     })
 
-    const origin = process.env.STORE_FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173'
-    const adminOrigin = origin.replace(/^http:\/\//, '').includes('admin.') ? origin : origin.replace(/^https?:\/\//, 'https://admin.')
-    const link = `${adminOrigin}/activate/${token}`
+    const link = `${adminOriginFromTenant(req.tenant)}/activate/${token}`
 
     await emailService.sendActivationEmail(admin.email, link)
 
@@ -258,7 +255,7 @@ const resendActivation = async (req, res, next) => {
 
 const createTenant = async (req, res, next) => {
   try {
-    const { slug, name, domain, adminDomain } = req.body
+    const { slug, name, domain, adminDomain, folderPrefix } = req.body
     if (!slug || !name) {
       return res.status(400).json({ error: 'slug y name son requeridos' })
     }
@@ -273,6 +270,7 @@ const createTenant = async (req, res, next) => {
       name,
       domain: domain || null,
       adminDomain: adminDomain || null,
+      folderPrefix: folderPrefix || null,
     })
 
     // Crear los settings default del tenant

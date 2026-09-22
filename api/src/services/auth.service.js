@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const { User, Setting } = require('../models')
 const { getStatus } = require('./billing.service')
+const { adminOriginFromTenant } = require('../utils/adminOrigin')
 
 const getBusinessName = async () => {
   const row = await Setting.findOne({ where: { key: 'business_name' } })
@@ -102,7 +103,7 @@ const changePassword = async (userId, newPassword) => {
 
 const emailService = require('./email.service')
 
-const forgotPassword = async (email) => {
+const forgotPassword = async (email, tenant) => {
   const user = await User.findOne({ where: { email, status: 'active' } })
   if (!user) {
     // No revelar si el email existe o no
@@ -115,9 +116,7 @@ const forgotPassword = async (email) => {
 
   await user.update({ resetTokenHash: hash, resetExpires: expires })
 
-  const origin = process.env.STORE_FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')[1] || process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173'
-  const adminOrigin = origin.replace(/^http:\/\//, '').includes('admin.') ? origin : origin.replace(/^https?:\/\//, 'https://admin.')
-  const link = `${adminOrigin}/reset/${token}`
+  const link = `${adminOriginFromTenant(tenant)}/reset/${token}`
 
   await emailService.sendResetPasswordEmail(email, link)
 

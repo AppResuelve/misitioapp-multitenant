@@ -6,7 +6,7 @@ const upload = async (req, res, next) => {
       return res.status(400).json({ error: 'No se envió ninguna imagen' })
     }
 
-    const media = await uploadService.uploadImage(req.file.buffer, req.file.originalname, req.body.folder)
+    const media = await uploadService.uploadImage(req.file.buffer, req.file.originalname, req.body.folder, req.tenant?.folderPrefix)
     res.status(201).json(media)
   } catch (err) {
     next(err)
@@ -69,7 +69,7 @@ const usage = async (req, res, next) => {
 
 const move = async (req, res, next) => {
   try {
-    const media = await uploadService.moveToFolder(req.params.id, req.body.folder)
+    const media = await uploadService.moveToFolder(req.params.id, req.body.folder, req.tenant?.folderPrefix)
     res.json(media)
   } catch (err) {
     next(err)

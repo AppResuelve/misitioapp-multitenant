@@ -53,7 +53,7 @@ const changePassword = async (req, res, next) => {
 const forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body
-    const result = await authService.forgotPassword(email)
+    const result = await authService.forgotPassword(email, req.tenant)
     res.json(result)
   } catch (err) {
     next(err)

@@ -1,6 +1,6 @@
 const { ChangeRequest } = require('../../models')
 
-const PLATFORM_API_URL = process.env.PLATFORM_API_URL || 'https://api.appresuelve.site'
+const PLATFORM_API_URL = process.env.PLATFORM_API_URL || 'https://api.appresuelve.com.ar'
 const PLATFORM_API_KEY = process.env.PLATFORM_API_KEY || ''
 
 let cachedModules = null
