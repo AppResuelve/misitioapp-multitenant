@@ -27,12 +27,16 @@ export async function proxy(req: NextRequest) {
   const slug = resolveSlug(req)
   const token = req.cookies.get(COOKIE)?.value
 
+  console.log('[proxy]', req.method, pathname, '→', apiUrl, 'tenant:', slug)
+
   // Login / reset-password: proxy al API y setear cookie de sesión HttpOnly
   if (pathname === '/api/auth/login' || pathname === '/api/auth/reset-password') {
     let body = ''
     try {
       body = await req.text()
-    } catch {}
+    } catch (err) {
+      console.error('[proxy] Error reading login body:', (err as Error).message)
+    }
 
     const res = await fetch(`${apiUrl}${pathname}`, {
       method: 'POST',
@@ -65,30 +69,48 @@ export async function proxy(req: NextRequest) {
   headers.set('X-Tenant-Slug', slug)
 
   const hasBody = !['GET', 'HEAD'].includes(req.method)
-  const res = await fetch(`${apiUrl}${pathname}${search}`, {
-    method: req.method,
-    headers,
-    body: hasBody ? req.body : undefined,
-  })
-
-  // Limpiar headers de transferencia/compresión porque fetch ya decodificó el body.
-  const responseHeaders = new Headers(res.headers)
-  responseHeaders.delete('content-encoding')
-  responseHeaders.delete('content-length')
-  responseHeaders.delete('transfer-encoding')
-
-  const response = new NextResponse(res.body, {
-    status: res.status,
-    headers: responseHeaders,
-  })
-
-  // Refrescar cookie si el API manda un nuevo token
-  const newToken = res.headers.get('x-new-token')
-  if (newToken) {
-    setSessionCookie(response, newToken)
+  let body: ArrayBuffer | undefined = undefined
+  if (hasBody) {
+    try {
+      body = await req.arrayBuffer()
+      console.log('[proxy] body size:', body.byteLength)
+    } catch (err) {
+      console.error('[proxy] Error reading body:', (err as Error).message)
+    }
   }
 
-  return response
+  try {
+    const res = await fetch(`${apiUrl}${pathname}${search}`, {
+      method: req.method,
+      headers,
+      body,
+    })
+
+    console.log('[proxy] response:', res.status, res.statusText)
+
+    // Limpiar headers de transferencia/compresión porque fetch ya decodificó el body.
+    const responseHeaders = new Headers(res.headers)
+    responseHeaders.delete('content-encoding')
+    responseHeaders.delete('content-length')
+    responseHeaders.delete('transfer-encoding')
+
+    const response = new NextResponse(res.body, {
+      status: res.status,
+      statusText: res.statusText,
+      headers: responseHeaders,
+    })
+
+    // Refrescar cookie si el API manda un nuevo token
+    const newToken = res.headers.get('x-new-token')
+    if (newToken) {
+      setSessionCookie(response, newToken)
+    }
+
+    return response
+  } catch (err) {
+    console.error('[proxy] Error forwarding request:', (err as Error).message, (err as Error).stack)
+    return new NextResponse('Error conectando con el API', { status: 502 })
+  }
 }
 
 export const config = {

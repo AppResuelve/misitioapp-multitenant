@@ -51,10 +51,12 @@ const list = async (query = {}) => {
     include[2].where = { id: Number(tagId) };
   }
 
-  const { count, rows } = await Product.findAndCountAll({
+  // Conteo separado para evitar bug de Sequelize con distinct + belongsToMany + limit
+  const count = await Product.count({ where });
+
+  const rows = await Product.findAll({
     where,
     include,
-    distinct: true,
     order: [["name", "ASC"]],
     limit: Number(limit),
     offset,
