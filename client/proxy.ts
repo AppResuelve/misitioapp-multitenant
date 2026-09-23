@@ -71,9 +71,15 @@ export async function proxy(req: NextRequest) {
     body: hasBody ? req.body : undefined,
   })
 
+  // Limpiar headers de transferencia/compresión porque fetch ya decodificó el body.
+  const responseHeaders = new Headers(res.headers)
+  responseHeaders.delete('content-encoding')
+  responseHeaders.delete('content-length')
+  responseHeaders.delete('transfer-encoding')
+
   const response = new NextResponse(res.body, {
     status: res.status,
-    headers: res.headers,
+    headers: responseHeaders,
   })
 
   // Refrescar cookie si el API manda un nuevo token

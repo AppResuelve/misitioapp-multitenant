@@ -4,7 +4,6 @@ const express = require('express')
 const cors = require('cors')
 const helmet = require('helmet')
 const morgan = require('morgan')
-const path = require('path')
 const mountRoutes = require('./routes')
 const errorHandler = require('./middleware/errorHandler')
 const timeout = require('./middleware/timeout')
@@ -37,16 +36,6 @@ app.use(timeout)
 
 // API routes
 mountRoutes(app)
-
-// Servir dashboard en producción
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../../client/dist')))
-  app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api')) {
-      res.sendFile(path.join(__dirname, '../../client/dist/index.html'))
-    }
-  })
-}
 
 // Error handler
 app.use(errorHandler)
