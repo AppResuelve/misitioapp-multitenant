@@ -2,6 +2,10 @@ import type { Metadata } from "next"
 import { Lobster, Source_Sans_3, Bebas_Neue, DM_Sans } from "next/font/google"
 import "./globals.css"
 import { baseMetadata } from "@/lib/metadata"
+import { AlertProvider } from "@/components/admin/ui/AlertContext"
+import { UnsavedChangesProvider } from "@/context/UnsavedChangesContext"
+import { AuthProvider } from "@/components/admin/context/AuthContext"
+import AdminShell from "@/components/admin/AdminShell"
 
 const bebasNeue = Bebas_Neue({
   subsets: ['latin'],
@@ -38,7 +42,17 @@ export const metadata: Metadata = baseMetadata as Metadata
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className={`h-full antialiased ${bebasNeue.variable} ${lobster.variable} ${sourceSans.variable} ${dmSans.variable}`} data-scroll-behavior="smooth">
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <div className="admin-root">
+          <AlertProvider>
+            <UnsavedChangesProvider>
+              <AuthProvider>
+                <AdminShell>{children}</AdminShell>
+              </AuthProvider>
+            </UnsavedChangesProvider>
+          </AlertProvider>
+        </div>
+      </body>
     </html>
   )
 }

@@ -21,7 +21,7 @@ function setSessionCookie(response: NextResponse, token: string) {
   })
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl
   const apiUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/+$/, '')
   const slug = resolveSlug(req)

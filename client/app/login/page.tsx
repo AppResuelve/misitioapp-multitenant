@@ -85,7 +85,7 @@ export default function Login() {
         </form>
 
         <p className="text-center mt-6">
-          <Link href="/forgot-password" className="text-sm text-zinc-500 hover:text-cyan-400 transition-colors">
+          <Link href="/forgot" className="text-sm text-zinc-500 hover:text-cyan-400 transition-colors">
             ¿Olvidaste tu contraseña?
           </Link>
         </p>

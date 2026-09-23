@@ -5,9 +5,7 @@ import { useEffect, useState } from "react"
 import { Menu } from "lucide-react"
 import dynamic from "next/dynamic"
 import { usePathname, useRouter } from "next/navigation"
-import { AuthProvider, useAuth } from "@/components/admin/context/AuthContext"
-import { AlertProvider } from "@/components/admin/ui/AlertContext"
-import { UnsavedChangesProvider } from "@/context/UnsavedChangesContext"
+import { useAuth } from "@/components/admin/context/AuthContext"
 import { Spinner } from "@/components/admin/ui/Spinner"
 import { Skeleton } from "@/components/admin/ui/Skeleton"
 
@@ -27,7 +25,7 @@ const PAGE_TITLES = {
   '/dashboard/change-requests': 'Solicitar cambio',
 } as Record<string, string>
 
-function AdminShell({ children }: { children: React.ReactNode }) {
+export default function AdminShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
@@ -113,20 +111,6 @@ function AdminShell({ children }: { children: React.ReactNode }) {
       <main className="ml-0 lg:ml-64 p-2 pt-16 lg:p-6 lg:pt-6 min-h-screen">
         {children}
       </main>
-    </div>
-  )
-}
-
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="admin-root">
-      <AlertProvider>
-        <UnsavedChangesProvider>
-          <AuthProvider>
-            <AdminShell>{children}</AdminShell>
-          </AuthProvider>
-        </UnsavedChangesProvider>
-      </AlertProvider>
     </div>
   )
 }
