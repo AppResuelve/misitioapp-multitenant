@@ -1,4 +1,5 @@
 const { Setting } = require('../../models')
+const { getTenantId } = require('../tenantContext')
 
 const DEFAULTS = [
   { key: 'store_status', value: 'active' },
@@ -20,8 +21,11 @@ const DEFAULTS = [
 ]
 
 const ensureDefaults = async () => {
+  const tenantId = getTenantId()
   for (const { key, value } of DEFAULTS) {
-    await Setting.findOrCreate({ where: { key }, defaults: { key, value } })
+    const where = tenantId ? { key, tenantId } : { key }
+    const defaults = tenantId ? { key, value, tenantId } : { key, value }
+    await Setting.findOrCreate({ where, defaults })
   }
 }
 
