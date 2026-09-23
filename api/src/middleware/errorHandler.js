@@ -1,5 +1,11 @@
 const errorHandler = (err, req, res, _next) => {
-  console.error(err.stack)
+  console.error('=== ERROR ===')
+  console.error('Message:', err.message)
+  console.error('Name:', err.name)
+  console.error('Status:', err.status)
+  if (err.sql) console.error('SQL:', err.sql)
+  console.error('Stack:', err.stack)
+  console.error('==============')
 
   if (err.name === 'MulterError') {
     if (err.code === 'LIMIT_FILE_SIZE') {
