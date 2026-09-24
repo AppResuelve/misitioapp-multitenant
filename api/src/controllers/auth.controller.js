@@ -3,7 +3,6 @@ const authService = require('../services/auth.service')
 const login = async (req, res, next) => {
   try {
     const { email, password } = req.body
-    console.log('[DEBUG login controller] email:', JSON.stringify(email), '| req.tenant.id:', req.tenant?.id, '| req.tenant:', JSON.stringify(req.tenant ? { id: req.tenant.id, slug: req.tenant.slug, domain: req.tenant.domain, adminDomain: req.tenant.adminDomain } : null))
     const result = await authService.login(email, password, req.tenant?.id)
     res.json(result)
   } catch (err) {

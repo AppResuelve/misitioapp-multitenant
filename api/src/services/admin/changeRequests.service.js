@@ -1,4 +1,5 @@
 const { ChangeRequest } = require('../../models')
+const { upsertSetting } = require('./settings.service')
 
 const PLATFORM_API_URL = process.env.PLATFORM_API_URL || 'https://api.appresuelve.com.ar'
 const PLATFORM_API_KEY = process.env.PLATFORM_API_KEY || ''
@@ -77,8 +78,8 @@ const getRemaining = async (tenantId) => {
   let used = settings.changes_this_month ?? 0
   if (settings.changes_month !== monthKey) {
     used = 0
-    await Setting.upsert({ tenantId, key: 'changes_this_month', value: 0 })
-    await Setting.upsert({ tenantId, key: 'changes_month', value: monthKey })
+    await upsertSetting(tenantId, 'changes_this_month', 0)
+    await upsertSetting(tenantId, 'changes_month', monthKey)
   }
 
   return { limit, used, remaining: limit - used, canRequest: used < limit }
@@ -129,10 +130,10 @@ ${Object.entries(values).map(([k, v]) => `• *${k}:* ${v}`).join('\n')}`
   rows.forEach((r) => { settings[r.key] = r.value })
 
   if (settings.changes_month !== monthKey) {
-    await Setting.upsert({ tenantId, key: 'changes_this_month', value: 1 })
-    await Setting.upsert({ tenantId, key: 'changes_month', value: monthKey })
+    await upsertSetting(tenantId, 'changes_this_month', 1)
+    await upsertSetting(tenantId, 'changes_month', monthKey)
   } else {
-    await Setting.upsert({ tenantId, key: 'changes_this_month', value: (settings.changes_this_month ?? 0) + 1 })
+    await upsertSetting(tenantId, 'changes_this_month', (settings.changes_this_month ?? 0) + 1)
   }
 
   return { ...request.toJSON(), whatsappLink }

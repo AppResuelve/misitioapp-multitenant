@@ -34,11 +34,7 @@ const login = async (email, password, tenantId) => {
   }
 
   const user = await User.findOne({ where: { email, status: 'active', tenantId } })
-  console.log('[DEBUG login service] findOne result:', user ? { id: user.id, email: user.email, status: user.status, tenantId: user.tenantId } : null, '| buscado: email=', JSON.stringify(email), 'tenantId=', JSON.stringify(tenantId))
   if (!user) {
-    // Diagnóstico: buscar sin filtro de tenant para ver qué hay
-    const byEmail = await User.findAll({ where: { email }, attributes: ['id', 'email', 'status', 'tenantId'] })
-    console.log('[DEBUG login service] usuarios con ese email (sin tenant):', JSON.stringify(byEmail))
     throw Object.assign(new Error('Credenciales inválidas'), { status: 401 })
   }
 
