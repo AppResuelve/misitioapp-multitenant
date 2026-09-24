@@ -44,7 +44,7 @@ const list = async (query = {}) => {
   const include = [
     { model: Category, as: "category", attributes: ["id", "name", "slug"] },
     skuInclude,
-    { model: TagValue, as: "tagValues", include: [{ model: Tag, as: "tag" }] },
+    { model: TagValue, as: "tagValues", separate: true, include: [{ model: Tag, as: "tag" }] },
   ];
 
   if (tagId) {

@@ -1,4 +1,4 @@
-const rateLimit = require('express-rate-limit')
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit')
 
 const authLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -24,7 +24,7 @@ const generalLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => {
     const tenant = req.headers['x-tenant-slug'] || 'unknown'
-    return `${tenant}:${req.ip}`
+    return `${tenant}:${ipKeyGenerator(req)}`
   },
   message: { error: 'Demasiadas solicitudes. Esperá un minuto.' },
 })
@@ -35,7 +35,7 @@ const globalIpLimiter = rateLimit({
   max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip,
+  keyGenerator: ipKeyGenerator,
   message: { error: 'Demasiadas solicitudes. Esperá un minuto.' },
 })
 

@@ -65,6 +65,7 @@ export async function proxy(req: NextRequest) {
   // Proxy genérico al API
   const headers = new Headers(req.headers)
   headers.delete('content-length')
+  headers.delete('origin') // Evita falsos positivos de CORS en el backend
   if (token) headers.set('Authorization', `Bearer ${token}`)
   headers.set('X-Tenant-Slug', slug)
 
