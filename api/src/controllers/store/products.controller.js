@@ -2,7 +2,7 @@ const productsService = require('../../services/store/products.service')
 
 const list = async (req, res, next) => {
   try {
-    const result = await productsService.list(req.query)
+    const result = await productsService.list(req.tenant.id, req.query)
     res.json(result)
   } catch (err) {
     next(err)
@@ -11,7 +11,7 @@ const list = async (req, res, next) => {
 
 const getBySlug = async (req, res, next) => {
   try {
-    const product = await productsService.getBySlug(req.params.slug)
+    const product = await productsService.getBySlug(req.tenant.id, req.params.slug)
     res.json(product)
   } catch (err) {
     next(err)

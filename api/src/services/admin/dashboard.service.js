@@ -1,10 +1,9 @@
 const { Product, Category, Order, Setting, sequelize } = require('../../models')
 const { QueryTypes } = require('sequelize')
-const { getTenantId } = require('../tenantContext')
 
-const get = async () => {
+const get = async (tenantId) => {
   // Store info
-  const settingRows = await Setting.findAll()
+  const settingRows = await Setting.findAll({ where: { tenantId } })
   const settings = {}
   settingRows.forEach((row) => {
     settings[row.key] = row.value
@@ -16,14 +15,13 @@ const get = async () => {
   }
 
   // Products
-  const totalProducts = await Product.count()
-  const activeProducts = await Product.count({ where: { status: 'active' } })
+  const totalProducts = await Product.count({ where: { tenantId } })
+  const activeProducts = await Product.count({ where: { tenantId, status: 'active' } })
 
   // Categories
-  const totalCategories = await Category.count()
+  const totalCategories = await Category.count({ where: { tenantId } })
 
   // Top products from orders
-  const tenantId = getTenantId()
   const tenantFilter = tenantId ? `AND orders.tenant_id = ${tenantId}` : ''
 
   const topProducts = await sequelize.query(

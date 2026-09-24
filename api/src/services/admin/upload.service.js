@@ -2,7 +2,7 @@ const { cloudinary } = require('../../middleware/upload')
 const { Media, Product } = require('../../models')
 const { Op } = require('sequelize')
 
-const uploadImage = async (fileBuffer, filename, folder = 'productos', folderPrefix) => {
+const uploadImage = async (tenantId, fileBuffer, filename, folder = 'productos', folderPrefix) => {
   const prefix = folderPrefix || process.env.CLOUDINARY_FOLDER_PREFIX || ''
   const fullFolder = prefix ? `clients/${prefix}/${folder}` : `clients/${folder}`
 
@@ -17,6 +17,7 @@ const uploadImage = async (fileBuffer, filename, folder = 'productos', folderPre
         if (error) return reject(error)
 
         const media = await Media.create({
+          tenantId,
           url: result.secure_url,
           publicId: result.public_id,
           filename,
@@ -33,8 +34,8 @@ const uploadImage = async (fileBuffer, filename, folder = 'productos', folderPre
   })
 }
 
-const list = async (folder, options = {}) => {
-  const where = {}
+const list = async (tenantId, folder, options = {}) => {
+  const where = { tenantId }
   if (folder) where.folder = folder
   if (options.trash) {
     where.deletedAt = { [Op.ne]: null }
@@ -44,8 +45,8 @@ const list = async (folder, options = {}) => {
   return Media.findAll({ where, order: [['createdAt', 'DESC']] })
 }
 
-const checkUsage = async (id) => {
-  const media = await Media.findByPk(id)
+const checkUsage = async (tenantId, id) => {
+  const media = await Media.findOne({ where: { tenantId, id } })
   if (!media) {
     throw Object.assign(new Error('Imagen no encontrada'), { status: 404 })
   }
@@ -53,6 +54,7 @@ const checkUsage = async (id) => {
   const products = await Product.findAll({
     attributes: ['id', 'name'],
     where: {
+      tenantId,
       images: { [Op.contains]: [media.url] },
     },
   })
@@ -63,22 +65,23 @@ const checkUsage = async (id) => {
   }
 }
 
-const remove = async (id) => {
-  const media = await Media.findByPk(id)
+const remove = async (tenantId, id) => {
+  const media = await Media.findOne({ where: { tenantId, id } })
   if (!media) {
     throw Object.assign(new Error('Imagen no encontrada'), { status: 404 })
   }
   return media.update({ deletedAt: new Date() })
 }
 
-const forceDelete = async (id) => {
-  const media = await Media.findByPk(id)
+const forceDelete = async (tenantId, id) => {
+  const media = await Media.findOne({ where: { tenantId, id } })
   if (!media) {
     throw Object.assign(new Error('Imagen no encontrada'), { status: 404 })
   }
 
   const products = await Product.findAll({
     where: {
+      tenantId,
       images: { [Op.contains]: [media.url] },
     },
   })
@@ -93,20 +96,20 @@ const forceDelete = async (id) => {
   return media.destroy()
 }
 
-const restore = async (id) => {
-  const media = await Media.findByPk(id)
+const restore = async (tenantId, id) => {
+  const media = await Media.findOne({ where: { tenantId, id } })
   if (!media) {
     throw Object.assign(new Error('Imagen no encontrada'), { status: 404 })
   }
   return media.update({ deletedAt: null })
 }
 
-const emptyTrash = async () => {
-  const trashed = await Media.findAll({ where: { deletedAt: { [Op.ne]: null } } })
+const emptyTrash = async (tenantId) => {
+  const trashed = await Media.findAll({ where: { tenantId, deletedAt: { [Op.ne]: null } } })
 
   for (const media of trashed) {
     const products = await Product.findAll({
-      where: { images: { [Op.contains]: [media.url] } },
+      where: { tenantId, images: { [Op.contains]: [media.url] } },
     })
 
     for (const product of products) {
@@ -122,8 +125,8 @@ const emptyTrash = async () => {
   return { deleted: trashed.length }
 }
 
-const moveToFolder = async (id, targetFolder, folderPrefix) => {
-  const media = await Media.findByPk(id)
+const moveToFolder = async (tenantId, id, targetFolder, folderPrefix) => {
+  const media = await Media.findOne({ where: { tenantId, id } })
   if (!media) {
     throw Object.assign(new Error('Imagen no encontrada'), { status: 404 })
   }
@@ -139,8 +142,9 @@ const moveToFolder = async (id, targetFolder, folderPrefix) => {
     return media
   }
 
+  let result
   try {
-    const result = await cloudinary.uploader.rename(oldPublicId, newPublicId, {
+    result = await cloudinary.uploader.rename(oldPublicId, newPublicId, {
       resource_type: 'image',
     })
   } catch (renameErr) {
@@ -157,7 +161,7 @@ const moveToFolder = async (id, targetFolder, folderPrefix) => {
 
   // Actualizar productos que referencian la URL vieja
   const products = await Product.findAll({
-    where: { images: { [Op.contains]: [oldUrl] } },
+    where: { tenantId, images: { [Op.contains]: [oldUrl] } },
   })
 
   for (const product of products) {

@@ -2,21 +2,21 @@ const tagsService = require('../../services/admin/tags.service')
 
 const list = async (req, res, next) => {
   try {
-    const tags = await tagsService.list()
+    const tags = await tagsService.list(req.tenant.id)
     res.json(tags)
   } catch (err) { next(err) }
 }
 
 const create = async (req, res, next) => {
   try {
-    const tag = await tagsService.create(req.body)
+    const tag = await tagsService.create(req.tenant.id, req.body)
     res.status(201).json(tag)
   } catch (err) { next(err) }
 }
 
 const update = async (req, res, next) => {
   try {
-    const result = await tagsService.update(req.params.id, req.body, req.query.force === 'true')
+    const result = await tagsService.update(req.tenant.id, req.params.id, req.body, req.query.force === 'true')
     if (result?.conflict) {
       return res.status(409).json(result.conflict)
     }
@@ -26,7 +26,7 @@ const update = async (req, res, next) => {
 
 const remove = async (req, res, next) => {
   try {
-    const result = await tagsService.remove(req.params.id, req.query.force === 'true')
+    const result = await tagsService.remove(req.tenant.id, req.params.id, req.query.force === 'true')
     if (result && result.requiresConfirmation) {
       return res.status(409).json(result)
     }

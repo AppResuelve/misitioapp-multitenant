@@ -11,7 +11,7 @@ const modules = async (req, res, next) => {
 
 const list = async (req, res, next) => {
   try {
-    const result = await changeRequestsService.list(req.query)
+    const result = await changeRequestsService.list(req.tenant.id, req.query)
     res.json(result)
   } catch (err) {
     next(err)
@@ -20,7 +20,7 @@ const list = async (req, res, next) => {
 
 const getRemaining = async (req, res, next) => {
   try {
-    const result = await changeRequestsService.getRemaining()
+    const result = await changeRequestsService.getRemaining(req.tenant.id)
     res.json(result)
   } catch (err) {
     next(err)
@@ -30,7 +30,7 @@ const getRemaining = async (req, res, next) => {
 const create = async (req, res, next) => {
   try {
     const { componentId, categoryId, values } = req.body
-    const request = await changeRequestsService.create(componentId, categoryId, values)
+    const request = await changeRequestsService.create(req.tenant.id, componentId, categoryId, values)
     res.status(201).json(request)
   } catch (err) {
     next(err)
@@ -39,7 +39,7 @@ const create = async (req, res, next) => {
 
 const update = async (req, res, next) => {
   try {
-    const request = await changeRequestsService.update(req.params.id, req.body.values)
+    const request = await changeRequestsService.update(req.tenant.id, req.params.id, req.body.values)
     res.json(request)
   } catch (err) {
     next(err)

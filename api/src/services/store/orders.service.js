@@ -1,7 +1,8 @@
 const { Order } = require('../../models')
 
-const create = async (data) => {
+const create = async (tenantId, data) => {
   return Order.create({
+    tenantId,
     items: data.items || [],
     customerName: data.customerName,
     customerPhone: data.customerPhone,

@@ -2,28 +2,28 @@ const attributesService = require('../../services/admin/attributes.service')
 
 const list = async (req, res, next) => {
   try {
-    const attributes = await attributesService.list()
+    const attributes = await attributesService.list(req.tenant.id)
     res.json(attributes)
   } catch (err) { next(err) }
 }
 
 const create = async (req, res, next) => {
   try {
-    const attribute = await attributesService.create(req.body)
+    const attribute = await attributesService.create(req.tenant.id, req.body)
     res.status(201).json(attribute)
   } catch (err) { next(err) }
 }
 
 const update = async (req, res, next) => {
   try {
-    const attribute = await attributesService.update(req.params.id, req.body)
+    const attribute = await attributesService.update(req.tenant.id, req.params.id, req.body)
     res.json(attribute)
   } catch (err) { next(err) }
 }
 
 const remove = async (req, res, next) => {
   try {
-    await attributesService.remove(req.params.id)
+    await attributesService.remove(req.tenant.id, req.params.id)
     res.status(204).end()
   } catch (err) { next(err) }
 }
@@ -31,9 +31,9 @@ const remove = async (req, res, next) => {
 const updateValue = async (req, res, next) => {
   try {
     const { AttributeValue } = require('../../models')
-    const attr = await AttributeValue.update(
+    await AttributeValue.update(
       { images: req.body.images || [] },
-      { where: { id: req.params.valueId, attributeId: req.params.attrId } }
+      { where: { tenantId: req.tenant.id, id: req.params.valueId, attributeId: req.params.attrId } }
     )
     res.json({ ok: true })
   } catch (err) { next(err) }

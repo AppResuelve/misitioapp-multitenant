@@ -7,23 +7,25 @@ const includeValues = {
   order: [['sort_order', 'ASC']],
 }
 
-const countProductsUsingValues = async (tagValueIds) => {
+const countProductsUsingValues = async (tenantId, tagValueIds) => {
   if (!tagValueIds || tagValueIds.length === 0) return 0
   return Product.count({
+    where: { tenantId },
     distinct: true,
     include: [{
       model: TagValue,
       as: 'tagValues',
-      where: { id: { [Op.in]: tagValueIds } },
+      where: { tenantId, id: { [Op.in]: tagValueIds } },
       attributes: [],
     }],
   })
 }
 
-const getSampleProducts = async (tagValueIds, limit = 3) => {
+const getSampleProducts = async (tenantId, tagValueIds, limit = 3) => {
   if (!tagValueIds || tagValueIds.length === 0) return []
   return Product.findAll({
     where: {
+      tenantId,
       id: {
         [Op.in]: sequelize.literal(`(
           SELECT DISTINCT product_id
@@ -37,10 +39,10 @@ const getSampleProducts = async (tagValueIds, limit = 3) => {
   })
 }
 
-const buildConflictResponse = async (valueIds, code, tagName) => {
-  const affectedCount = await countProductsUsingValues(valueIds)
+const buildConflictResponse = async (tenantId, valueIds, code, tagName) => {
+  const affectedCount = await countProductsUsingValues(tenantId, valueIds)
   if (affectedCount === 0) return null
-  const sampleProducts = await getSampleProducts(valueIds)
+  const sampleProducts = await getSampleProducts(tenantId, valueIds)
   return {
     success: false,
     code,
@@ -51,59 +53,60 @@ const buildConflictResponse = async (valueIds, code, tagName) => {
   }
 }
 
-const list = async () => {
+const list = async (tenantId) => {
   return Tag.findAll({
+    where: { tenantId },
     include: [includeValues],
     order: [['sort_order', 'ASC']],
   })
 }
 
-const create = async (data) => {
-  const tag = await Tag.create({ name: data.name, color: data.color || '#6366f1', sortOrder: data.sortOrder || 0 })
+const create = async (tenantId, data) => {
+  const tag = await Tag.create({ tenantId, name: data.name, color: data.color || '#6366f1', sortOrder: data.sortOrder || 0 })
   if (data.values && Array.isArray(data.values)) {
     for (const v of data.values) {
-      await TagValue.create({ tagId: tag.id, value: v.value, sortOrder: v.sortOrder || 0 })
+      await TagValue.create({ tenantId, tagId: tag.id, value: v.value, sortOrder: v.sortOrder || 0 })
     }
   }
-  return Tag.findByPk(tag.id, { include: [includeValues] })
+  return Tag.findOne({ where: { tenantId, id: tag.id }, include: [includeValues] })
 }
 
-const update = async (id, data, force) => {
-  const tag = await Tag.findByPk(id)
+const update = async (tenantId, id, data, force) => {
+  const tag = await Tag.findOne({ where: { tenantId, id } })
   if (!tag) throw Object.assign(new Error('Etiqueta no encontrada'), { status: 404 })
   await tag.update({ name: data.name, color: data.color, sortOrder: data.sortOrder || 0 })
   if (data.values && Array.isArray(data.values)) {
     const keepIds = []
     for (const v of data.values) {
       if (v.id) {
-        const tv = await TagValue.findByPk(v.id)
+        const tv = await TagValue.findOne({ where: { tenantId, id: v.id } })
         if (tv && tv.tagId === tag.id) {
           await tv.update({ value: v.value, sortOrder: v.sortOrder || 0 })
           keepIds.push(tv.id)
         }
       } else {
-        const created = await TagValue.create({ tagId: tag.id, value: v.value, sortOrder: v.sortOrder || 0 })
+        const created = await TagValue.create({ tenantId, tagId: tag.id, value: v.value, sortOrder: v.sortOrder || 0 })
         keepIds.push(created.id)
       }
     }
-    const allValueIds = (await TagValue.findAll({ where: { tagId: id }, attributes: ['id'] })).map(v => v.id)
+    const allValueIds = (await TagValue.findAll({ where: { tenantId, tagId: id }, attributes: ['id'] })).map(v => v.id)
     const removedIds = allValueIds.filter(rid => !keepIds.includes(rid))
     if (removedIds.length > 0 && !force) {
-      const conflict = await buildConflictResponse(removedIds, 'TAG_VALUES_IN_USE', tag.name)
+      const conflict = await buildConflictResponse(tenantId, removedIds, 'TAG_VALUES_IN_USE', tag.name)
       if (conflict) return { tag: null, conflict }
     }
-    await TagValue.destroy({ where: { tagId: id, id: { [Op.notIn]: keepIds } } })
+    await TagValue.destroy({ where: { tenantId, tagId: id, id: { [Op.notIn]: keepIds } } })
   }
-  return Tag.findByPk(id, { include: [includeValues] })
+  return Tag.findOne({ where: { tenantId, id }, include: [includeValues] })
 }
 
-const remove = async (id, force) => {
-  const tag = await Tag.findByPk(id)
+const remove = async (tenantId, id, force) => {
+  const tag = await Tag.findOne({ where: { tenantId, id } })
   if (!tag) throw Object.assign(new Error('Etiqueta no encontrada'), { status: 404 })
 
   if (!force) {
-    const valueIds = (await TagValue.findAll({ where: { tagId: id }, attributes: ['id'] })).map(v => v.id)
-    const conflict = await buildConflictResponse(valueIds, 'TAG_IN_USE', tag.name)
+    const valueIds = (await TagValue.findAll({ where: { tenantId, tagId: id }, attributes: ['id'] })).map(v => v.id)
+    const conflict = await buildConflictResponse(tenantId, valueIds, 'TAG_IN_USE', tag.name)
     if (conflict) return conflict
   }
 

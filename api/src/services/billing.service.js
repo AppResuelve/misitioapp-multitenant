@@ -1,11 +1,9 @@
 const { Tenant } = require('../models')
-const { getTenantId } = require('./tenantContext')
 
 const STATUSES = ['active', 'past_due', 'suspended']
 
-// Devuelve el billing_status del tenant actual (resuelto por AsyncLocalStorage).
-const getStatus = async () => {
-  const tenantId = getTenantId()
+// Devuelve el billing_status del tenant indicado.
+const getStatus = async (tenantId) => {
   if (!tenantId) return 'active'
   const tenant = await Tenant.findByPk(tenantId)
   return STATUSES.includes(tenant?.billingStatus) ? tenant.billingStatus : 'active'

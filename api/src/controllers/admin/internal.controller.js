@@ -1,7 +1,6 @@
 const crypto = require('crypto')
 const { User, Setting, Product, Service, Tenant } = require('../../models')
 const emailService = require('../../services/email.service')
-const { run } = require('../../services/tenantContext')
 const { ensureDefaults } = require('../../services/store/settings.service')
 const { getStatus, setStatus } = require('../../services/billing.service')
 const { adminOriginFromTenant } = require('../../utils/adminOrigin')
@@ -9,6 +8,7 @@ const { adminOriginFromTenant } = require('../../utils/adminOrigin')
 const seedSettings = async (req, res, next) => {
   try {
     const data = req.body
+    const tenantId = req.tenant.id
 
     const mappings = {
       businessName: 'business_name',
@@ -27,11 +27,11 @@ const seedSettings = async (req, res, next) => {
       const config = typeof mapping === 'string' ? { key: mapping } : mapping
       const value = data[field]
       if (value !== undefined) {
-        const existing = await Setting.findOne({ where: { key: config.key } })
+        const existing = await Setting.findOne({ where: { tenantId, key: config.key } })
         if (existing) {
           await existing.update({ value })
         } else {
-          await Setting.create({ key: config.key, value })
+          await Setting.create({ tenantId, key: config.key, value })
         }
       }
     }
@@ -88,12 +88,14 @@ const seedProducts = async (req, res, next) => {
     const nameCol = NAME_ALIASES.reduce((found, alias) => found || headers.find((h) => h.toLowerCase().includes(alias)) || '', '') || headers[0]
     const priceCol = PRICE_ALIASES.reduce((found, alias) => found || headers.find((h) => h.toLowerCase().includes(alias)) || '', '') || headers[0]
 
+    const tenantId = req.tenant.id
     const products = rows
       .map((row) => {
         const name = String(row[nameCol] ?? '').trim()
         const price = row[priceCol]
         if (!name || price == null || price === '' || isNaN(Number(price)) || Number(price) < 0) return null
         return {
+          tenantId,
           name,
           slug: slugify(name),
           retailPrice: Number(price) || 0,
@@ -114,11 +116,12 @@ const seedProducts = async (req, res, next) => {
 const createAdmin = async (req, res, next) => {
   try {
     const { email, name } = req.body
+    const tenantId = req.tenant.id
     if (!email || !name) {
       return res.status(400).json({ error: 'email y name son requeridos' })
     }
 
-    const existing = await User.findOne({ where: { role: 'admin' } })
+    const existing = await User.findOne({ where: { tenantId, role: 'admin' } })
     if (existing) {
       return res.status(409).json({ error: 'Ya existe un administrador' })
     }
@@ -128,6 +131,7 @@ const createAdmin = async (req, res, next) => {
     const expires = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24h
 
     await User.create({
+      tenantId,
       email,
       name,
       password: '',
@@ -151,6 +155,7 @@ const createAdmin = async (req, res, next) => {
 const seedServices = async (req, res, next) => {
   try {
     const services = req.body
+    const tenantId = req.tenant.id
     if (!Array.isArray(services) || services.length === 0) {
       return res.json({ created: 0 })
     }
@@ -160,6 +165,7 @@ const seedServices = async (req, res, next) => {
     const rows = services
       .filter((s) => s.name?.trim())
       .map((s) => ({
+        tenantId,
         name: s.name.trim(),
         slug: slugify(s.name.trim()),
         description: s.description || null,
@@ -180,7 +186,7 @@ const seedServices = async (req, res, next) => {
 const getAdminStatus = async (req, res, next) => {
   try {
     const admin = await User.findOne({
-      where: { role: 'admin' },
+      where: { tenantId: req.tenant.id, role: 'admin' },
       attributes: ['status', 'activationSentAt', 'activationExpires'],
     })
 
@@ -212,7 +218,7 @@ const getAdminStatus = async (req, res, next) => {
 
 const resendActivation = async (req, res, next) => {
   try {
-    const admin = await User.findOne({ where: { role: 'admin' } })
+    const admin = await User.findOne({ where: { tenantId: req.tenant.id, role: 'admin' } })
     if (!admin) {
       return res.status(404).json({ error: 'No hay administrador creado' })
     }
@@ -274,7 +280,7 @@ const createTenant = async (req, res, next) => {
     })
 
     // Crear los settings default del tenant
-    await run(tenant.id, () => ensureDefaults())
+    await ensureDefaults(tenant.id)
 
     res.status(201).json({ id: tenant.id, slug: tenant.slug, name: tenant.name })
   } catch (err) {
@@ -298,7 +304,7 @@ const setBillingStatus = async (req, res, next) => {
       return res.status(400).json({ error: 'status es requerido' })
     }
     await setStatus(req.tenant.id, status)
-    res.json({ success: true, billing_status: await getStatus() })
+    res.json({ success: true, billing_status: await getStatus(req.tenant.id) })
   } catch (err) {
     next(err)
   }
@@ -306,7 +312,7 @@ const setBillingStatus = async (req, res, next) => {
 
 const getBillingStatus = async (req, res, next) => {
   try {
-    res.json({ billing_status: await getStatus() })
+    res.json({ billing_status: await getStatus(req.tenant.id) })
   } catch (err) {
     next(err)
   }

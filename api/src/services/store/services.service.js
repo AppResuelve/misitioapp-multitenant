@@ -31,10 +31,10 @@ const variantInclude = {
   ],
 };
 
-const list = async (query = {}) => {
+const list = async (tenantId, query = {}) => {
   const { page = 1, limit = 50 } = query;
   const offset = (page - 1) * limit;
-  const where = { status: "active" };
+  const where = { tenantId, status: "active" };
 
   const { count, rows } = await Service.findAndCountAll({
     where,
@@ -52,9 +52,9 @@ const list = async (query = {}) => {
   };
 };
 
-const getBySlug = async (slug) => {
+const getBySlug = async (tenantId, slug) => {
   const service = await Service.findOne({
-    where: { slug, status: "active" },
+    where: { tenantId, slug, status: "active" },
     include: [variantInclude],
   });
   if (!service)

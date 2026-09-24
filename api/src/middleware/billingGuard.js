@@ -8,7 +8,7 @@ const billingGuard = async (req, res, next) => {
   }
 
   try {
-    const status = await getStatus()
+    const status = await getStatus(req.tenant?.id)
     if (status === 'suspended') {
       return res.status(403).json({ error: 'store_suspended', message: 'Tienda suspendida por falta de pago.' })
     }

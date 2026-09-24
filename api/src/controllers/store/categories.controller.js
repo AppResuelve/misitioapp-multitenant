@@ -2,7 +2,7 @@ const categoriesService = require('../../services/store/categories.service')
 
 const list = async (req, res, next) => {
   try {
-    const categories = await categoriesService.list()
+    const categories = await categoriesService.list(req.tenant.id)
     res.json(categories)
   } catch (err) {
     next(err)
@@ -11,7 +11,7 @@ const list = async (req, res, next) => {
 
 const getBySlug = async (req, res, next) => {
   try {
-    const category = await categoriesService.getBySlug(req.params.slug)
+    const category = await categoriesService.getBySlug(req.tenant.id, req.params.slug)
     res.json(category)
   } catch (err) {
     next(err)

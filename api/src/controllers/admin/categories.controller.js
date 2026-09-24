@@ -2,7 +2,7 @@ const categoriesService = require('../../services/admin/categories.service')
 
 const list = async (req, res, next) => {
   try {
-    const categories = await categoriesService.list()
+    const categories = await categoriesService.list(req.tenant.id)
     res.json(categories)
   } catch (err) {
     next(err)
@@ -11,7 +11,7 @@ const list = async (req, res, next) => {
 
 const getById = async (req, res, next) => {
   try {
-    const category = await categoriesService.getById(req.params.id)
+    const category = await categoriesService.getById(req.tenant.id, req.params.id)
     res.json(category)
   } catch (err) {
     next(err)
@@ -20,7 +20,7 @@ const getById = async (req, res, next) => {
 
 const create = async (req, res, next) => {
   try {
-    const category = await categoriesService.create(req.body)
+    const category = await categoriesService.create(req.tenant.id, req.body)
     res.status(201).json(category)
   } catch (err) {
     next(err)
@@ -29,7 +29,7 @@ const create = async (req, res, next) => {
 
 const update = async (req, res, next) => {
   try {
-    const category = await categoriesService.update(req.params.id, req.body)
+    const category = await categoriesService.update(req.tenant.id, req.params.id, req.body)
     res.json(category)
   } catch (err) {
     next(err)
@@ -38,7 +38,7 @@ const update = async (req, res, next) => {
 
 const remove = async (req, res, next) => {
   try {
-    await categoriesService.remove(req.params.id)
+    await categoriesService.remove(req.tenant.id, req.params.id)
     res.status(204).end()
   } catch (err) {
     next(err)
@@ -47,7 +47,7 @@ const remove = async (req, res, next) => {
 
 const reorder = async (req, res, next) => {
   try {
-    const categories = await categoriesService.reorder(req.body.orderedIds)
+    const categories = await categoriesService.reorder(req.tenant.id, req.body.orderedIds)
     res.json(categories)
   } catch (err) {
     next(err)
@@ -60,7 +60,7 @@ const toggleStatus = async (req, res, next) => {
     if (!['active', 'draft'].includes(status)) {
       return res.status(400).json({ error: 'Status inválido' })
     }
-    const category = await categoriesService.toggleStatus(req.params.id, status)
+    const category = await categoriesService.toggleStatus(req.tenant.id, req.params.id, status)
     res.json(category)
   } catch (err) {
     next(err)

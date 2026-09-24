@@ -3,7 +3,7 @@ const { validateService, validateServiceUpdate } = require('../../validations/se
 
 const list = async (req, res, next) => {
   try {
-    const result = await servicesService.list(req.query)
+    const result = await servicesService.list(req.tenant.id, req.query)
     res.json(result)
   } catch (err) {
     next(err)
@@ -12,7 +12,7 @@ const list = async (req, res, next) => {
 
 const getById = async (req, res, next) => {
   try {
-    const service = await servicesService.getById(req.params.id)
+    const service = await servicesService.getById(req.tenant.id, req.params.id)
     res.json(service)
   } catch (err) {
     next(err)
@@ -22,7 +22,7 @@ const getById = async (req, res, next) => {
 const create = async (req, res, next) => {
   try {
     const data = validateService(req.body)
-    const service = await servicesService.create(data)
+    const service = await servicesService.create(req.tenant.id, data)
     res.status(201).json(service)
   } catch (err) {
     next(err)
@@ -32,7 +32,7 @@ const create = async (req, res, next) => {
 const update = async (req, res, next) => {
   try {
     const data = validateServiceUpdate(req.body)
-    const service = await servicesService.update(req.params.id, data)
+    const service = await servicesService.update(req.tenant.id, req.params.id, data)
     res.json(service)
   } catch (err) {
     next(err)
@@ -41,7 +41,7 @@ const update = async (req, res, next) => {
 
 const remove = async (req, res, next) => {
   try {
-    await servicesService.remove(req.params.id)
+    await servicesService.remove(req.tenant.id, req.params.id)
     res.status(204).end()
   } catch (err) {
     next(err)

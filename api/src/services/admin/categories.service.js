@@ -8,8 +8,9 @@ const slugify = (text) => {
     .substring(0, 255)
 }
 
-const list = async () => {
+const list = async (tenantId) => {
   return Category.findAll({
+    where: { tenantId },
     order: [['order', 'ASC'], ['name', 'ASC']],
     include: [{
       model: Product,
@@ -21,28 +22,28 @@ const list = async () => {
   })
 }
 
-const getById = async (id) => {
-  const category = await Category.findByPk(id)
+const getById = async (tenantId, id) => {
+  const category = await Category.findOne({ where: { tenantId, id } })
   if (!category) {
     throw Object.assign(new Error('Categoría no encontrada'), { status: 404 })
   }
   return category
 }
 
-const create = async (data) => {
+const create = async (tenantId, data) => {
   if (!data.slug && data.name) {
     data.slug = slugify(data.name)
   }
-  return Category.create(data)
+  return Category.create({ ...data, tenantId })
 }
 
-const update = async (id, data) => {
-  const category = await getById(id)
+const update = async (tenantId, id, data) => {
+  const category = await getById(tenantId, id)
   if (!data.slug && data.name) {
     data.slug = slugify(data.name)
   }
   if (data.slug && data.slug !== category.slug) {
-    const existing = await Category.findOne({ where: { slug: data.slug } })
+    const existing = await Category.findOne({ where: { tenantId, slug: data.slug } })
     if (existing && existing.id !== category.id) {
       throw Object.assign(new Error('Ya existe una categoría con ese slug'), { status: 400 })
     }
@@ -50,21 +51,21 @@ const update = async (id, data) => {
   return category.update(data)
 }
 
-const remove = async (id) => {
-  const category = await getById(id)
+const remove = async (tenantId, id) => {
+  const category = await getById(tenantId, id)
   return category.destroy()
 }
 
-const reorder = async (orderedIds) => {
+const reorder = async (tenantId, orderedIds) => {
   const updates = orderedIds.map((categoryId, index) =>
-    Category.update({ order: index }, { where: { id: categoryId } })
+    Category.update({ order: index }, { where: { tenantId, id: categoryId } })
   )
   await Promise.all(updates)
-  return list()
+  return list(tenantId)
 }
 
-const toggleStatus = async (id, status) => {
-  const category = await getById(id)
+const toggleStatus = async (tenantId, id, status) => {
+  const category = await getById(tenantId, id)
   await category.update({ status })
   return category
 }

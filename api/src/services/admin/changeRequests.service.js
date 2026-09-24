@@ -45,11 +45,12 @@ const findComponentInModules = (categories, componentId) => {
   return null
 }
 
-const list = async (query = {}) => {
+const list = async (tenantId, query = {}) => {
   const { page = 1, limit = 20 } = query
   const offset = (page - 1) * limit
 
   const { count, rows } = await ChangeRequest.findAndCountAll({
+    where: { tenantId },
     order: [['createdAt', 'DESC']],
     limit: Number(limit),
     offset,
@@ -63,10 +64,10 @@ const list = async (query = {}) => {
   }
 }
 
-const getRemaining = async () => {
+const getRemaining = async (tenantId) => {
   const { Setting } = require('../../models')
   const settings = {}
-  const rows = await Setting.findAll()
+  const rows = await Setting.findAll({ where: { tenantId } })
   rows.forEach((r) => { settings[r.key] = r.value })
 
   const limit = settings.monthly_changes_limit ?? 2
@@ -76,17 +77,17 @@ const getRemaining = async () => {
   let used = settings.changes_this_month ?? 0
   if (settings.changes_month !== monthKey) {
     used = 0
-    await Setting.upsert({ key: 'changes_this_month', value: 0 })
-    await Setting.upsert({ key: 'changes_month', value: monthKey })
+    await Setting.upsert({ tenantId, key: 'changes_this_month', value: 0 })
+    await Setting.upsert({ tenantId, key: 'changes_month', value: monthKey })
   }
 
   return { limit, used, remaining: limit - used, canRequest: used < limit }
 }
 
-const create = async (componentId, categoryId, values) => {
+const create = async (tenantId, componentId, categoryId, values) => {
   const { Setting } = require('../../models')
 
-  const { remaining } = await getRemaining()
+  const { remaining } = await getRemaining(tenantId)
   if (remaining <= 0) {
     throw Object.assign(new Error('Ya alcanzaste el límite de cambios de este mes.'), { status: 429 })
   }
@@ -106,6 +107,7 @@ const create = async (componentId, categoryId, values) => {
 ${Object.entries(values).map(([k, v]) => `• *${k}:* ${v}`).join('\n')}`
 
   const request = await ChangeRequest.create({
+    tenantId,
     componentId,
     categoryId,
     values,
@@ -123,21 +125,21 @@ ${Object.entries(values).map(([k, v]) => `• *${k}:* ${v}`).join('\n')}`
   const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
   const settings = {}
-  const rows = await Setting.findAll()
+  const rows = await Setting.findAll({ where: { tenantId } })
   rows.forEach((r) => { settings[r.key] = r.value })
 
   if (settings.changes_month !== monthKey) {
-    await Setting.upsert({ key: 'changes_this_month', value: 1 })
-    await Setting.upsert({ key: 'changes_month', value: monthKey })
+    await Setting.upsert({ tenantId, key: 'changes_this_month', value: 1 })
+    await Setting.upsert({ tenantId, key: 'changes_month', value: monthKey })
   } else {
-    await Setting.upsert({ key: 'changes_this_month', value: (settings.changes_this_month ?? 0) + 1 })
+    await Setting.upsert({ tenantId, key: 'changes_this_month', value: (settings.changes_this_month ?? 0) + 1 })
   }
 
   return { ...request.toJSON(), whatsappLink }
 }
 
-const update = async (id, values) => {
-  const request = await ChangeRequest.findByPk(id)
+const update = async (tenantId, id, values) => {
+  const request = await ChangeRequest.findOne({ where: { tenantId, id } })
   if (!request) {
     throw Object.assign(new Error('Solicitud no encontrada'), { status: 404 })
   }
@@ -163,8 +165,8 @@ ${Object.entries(values).map(([k, v]) => `• *${k}:* ${v}`).join('\n')}`
   return { ...updated.toJSON(), whatsappLink }
 }
 
-const updateStatus = async (id, status, adminNotes) => {
-  const request = await ChangeRequest.findByPk(id)
+const updateStatus = async (tenantId, id, status, adminNotes) => {
+  const request = await ChangeRequest.findOne({ where: { tenantId, id } })
   if (!request) {
     throw Object.assign(new Error('Solicitud no encontrada'), { status: 404 })
   }

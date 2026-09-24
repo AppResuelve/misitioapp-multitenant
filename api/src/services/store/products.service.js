@@ -10,7 +10,6 @@ const {
 } = require("../../models");
 const { Op } = require("sequelize");
 const { applyUnitPricing } = require("../../utils/unitPricing");
-const { getTenantId } = require("../tenantContext");
 const sanitizeHtml = require("sanitize-html");
 
 const sanitizeDescription = (html) =>
@@ -39,7 +38,7 @@ const skuInclude = {
   order: [["sort_order", "ASC"]],
 };
 
-const list = async (query = {}) => {
+const list = async (tenantId, query = {}) => {
   const {
     page = 1,
     limit = 50,
@@ -53,7 +52,6 @@ const list = async (query = {}) => {
   const conditions = ['"Product"."status" = \'active\''];
   const bindParams = []; // Renombrado a bindParams para mayor claridad
 
-  const tenantId = getTenantId();
   if (tenantId) {
     conditions.push(`"Product"."tenant_id" = $${bindParams.length + 1}`);
     bindParams.push(tenantId);
@@ -176,9 +174,9 @@ const list = async (query = {}) => {
   };
 };
 
-const getBySlug = async (slug) => {
+const getBySlug = async (tenantId, slug) => {
   const product = await Product.findOne({
-    where: { slug, status: 'active' },
+    where: { tenantId, slug, status: 'active' },
     include: [
       { model: Category, as: 'category', attributes: ['id', 'name', 'slug'] },
       skuInclude,

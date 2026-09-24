@@ -8,6 +8,7 @@ const {
   Tag,
   sequelize,
 } = require("../../models");
+const { Op, QueryTypes } = require("sequelize");
 
 const { resolveDiscountFields } = require('../../utils/discount')
 const { generateSkuCode } = require('../../utils/skuGenerator')
@@ -27,57 +28,81 @@ const skuInclude = {
   order: [["sort_order", "ASC"]],
 };
 
-const list = async (query = {}) => {
+const list = async (tenantId, query = {}) => {
   const { page = 1, limit = 20, search, categoryId, status, tagId } = query;
   const offset = (page - 1) * limit;
 
-  const where = {};
+  const conditions = ['"Product"."id" IS NOT NULL'];
+  const bindParams = [];
+
+  if (tenantId) {
+    conditions.push(`"Product"."tenant_id" = $${bindParams.length + 1}`);
+    bindParams.push(tenantId);
+  }
   if (search) {
-    where[require("sequelize").Op.or] = [
-      { name: { [require("sequelize").Op.iLike]: `%${search}%` } },
-      { description: { [require("sequelize").Op.iLike]: `%${search}%` } },
-    ];
+    conditions.push(`("Product"."name" ILIKE $${bindParams.length + 1} OR "Product"."description" ILIKE $${bindParams.length + 1})`);
+    bindParams.push(`%${search}%`);
   }
-  if (categoryId) where.categoryId = categoryId;
-  if (status) where.status = status;
-
-  const include = [
-    { model: Category, as: "category", attributes: ["id", "name", "slug"] },
-    skuInclude,
-    { model: TagValue, as: "tagValues", separate: true, include: [{ model: Tag, as: "tag" }] },
-  ];
-
+  if (categoryId) {
+    conditions.push(`"Product"."category_id" = $${bindParams.length + 1}`);
+    bindParams.push(Number(categoryId));
+  }
+  if (status) {
+    conditions.push(`"Product"."status" = $${bindParams.length + 1}`);
+    bindParams.push(status);
+  }
   if (tagId) {
-    include[2].where = { id: Number(tagId) };
+    conditions.push(`"Product"."id" IN (SELECT "product_id" FROM "product_tags" WHERE "tag_value_id" = $${bindParams.length + 1})`);
+    bindParams.push(Number(tagId));
   }
 
-  // Conteo separado para evitar bug de Sequelize con distinct + belongsToMany + limit
-  const count = await Product.count({ where });
+  const whereClause = conditions.join(' AND ');
 
-  const rows = await Product.findAll({
-    where,
-    include,
-    order: [["name", "ASC"]],
-    limit: Number(limit),
-    offset,
-  });
+  const countResult = await sequelize.query(
+    `SELECT COUNT(*) as total FROM "products" AS "Product" WHERE ${whereClause}`,
+    { bind: bindParams, type: QueryTypes.SELECT }
+  );
+  const total = parseInt(countResult[0]?.total || '0');
 
-  rows.forEach(applyUnitPricing);
+  if (total === 0) {
+    return { products: [], total: 0, page: Number(page), totalPages: 0 };
+  }
+
+  const idResult = await sequelize.query(
+    `SELECT "Product"."id" FROM "products" AS "Product" WHERE ${whereClause} ORDER BY "Product"."name" ASC LIMIT $${bindParams.length + 1} OFFSET $${bindParams.length + 2}`,
+    { bind: [...bindParams, Number(limit), offset], type: QueryTypes.SELECT }
+  );
+  const ids = idResult.map((r) => r.id);
+
+  const products = ids.length === 0
+    ? []
+    : await Product.findAll({
+        where: { id: { [Op.in]: ids } },
+        include: [
+          { model: Category, as: "category", attributes: ["id", "name", "slug"] },
+          skuInclude,
+          { model: TagValue, as: "tagValues", include: [{ model: Tag, as: "tag" }] },
+        ],
+        order: [["name", "ASC"]],
+      });
+
+  products.forEach(applyUnitPricing);
 
   return {
-    products: rows,
-    total: count,
+    products,
+    total,
     page: Number(page),
-    totalPages: Math.ceil(count / limit),
+    totalPages: Math.ceil(total / limit),
   };
 };
 
-const getById = async (id) => {
+const getById = async (tenantId, id) => {
   const numericId = Number(id)
   if (!Number.isInteger(numericId) || numericId <= 0) {
     throw Object.assign(new Error("ID de producto inválido"), { status: 400 });
   }
-  const product = await Product.findByPk(numericId, {
+  const product = await Product.findOne({
+    where: { tenantId, id: numericId },
     include: [
       { model: Category, as: "category", attributes: ["id", "name", "slug"] },
       skuInclude,
@@ -111,11 +136,12 @@ const slugify = (text) => {
     .substring(0, 255);
 };
 
-const syncSkus = async (productId, skus = [], basePrices, transaction) => {
+const syncSkus = async (tenantId, productId, skus = [], basePrices, transaction) => {
   const skuIds = [];
 
   for (const s of skus) {
     const skuData = {
+      tenantId,
       productId: productId,
       retailPrice: s.retailPrice != null ? s.retailPrice : (basePrices?.retailPrice ?? 0),
       wholesalePrice: s.wholesalePrice ?? basePrices?.wholesalePrice ?? null,
@@ -129,7 +155,7 @@ const syncSkus = async (productId, skus = [], basePrices, transaction) => {
 
     let sku;
     if (s.id) {
-      sku = await ProductSku.findByPk(s.id, { transaction });
+      sku = await ProductSku.findOne({ where: { tenantId, id: s.id }, transaction });
       if (sku && sku.productId === productId) {
         await sku.update(skuData, { transaction });
       } else {
@@ -161,18 +187,18 @@ const syncSkus = async (productId, skus = [], basePrices, transaction) => {
   }
 
   await ProductSku.destroy({
-    where: { productId, id: { [require("sequelize").Op.notIn]: skuIds } },
+    where: { tenantId, productId, id: { [require("sequelize").Op.notIn]: skuIds } },
     transaction,
   });
 };
 
-const create = async (data) => {
+const create = async (tenantId, data) => {
   if (!data.slug && data.name) {
     data.slug = slugify(data.name);
   }
 
   if (data.slug) {
-    const existing = await Product.findOne({ where: { slug: data.slug } });
+    const existing = await Product.findOne({ where: { tenantId, slug: data.slug } });
     if (existing) {
       throw Object.assign(new Error('Ya existe un producto con ese slug'), { status: 400 });
     }
@@ -189,18 +215,18 @@ const create = async (data) => {
   const { skus, tagIds, stock, ...productData } = data;
 
   const result = await sequelize.transaction(async (t) => {
-    const product = await Product.create(productData, { transaction: t });
+    const product = await Product.create({ ...productData, tenantId }, { transaction: t });
     if (tagIds && tagIds.length > 0) {
       await product.setTagValues(tagIds, { transaction: t });
     }
     if (skus && skus.length > 0) {
       const basePrices = { retailPrice: product.retailPrice, wholesalePrice: product.wholesalePrice, wholesaleMinQty: product.wholesaleMinQty }
-      await syncSkus(product.id, skus, basePrices, t);
+      await syncSkus(tenantId, product.id, skus, basePrices, t);
       const allAttrIds = skus.flatMap(s => s.attributeValueIds || []).filter(Boolean)
       let hasUnitType = false
       if (allAttrIds.length > 0) {
         const vals = await AttributeValue.findAll({
-          where: { id: allAttrIds },
+          where: { tenantId, id: { [Op.in]: allAttrIds } },
           include: [{ model: Attribute, as: 'attribute', attributes: ['unitType'] }],
           transaction: t
         })
@@ -213,8 +239,9 @@ const create = async (data) => {
     } else {
       // Producto simple: crear/actualizar SKU base
       const [baseSku] = await ProductSku.findOrCreate({
-        where: { productId: product.id },
+        where: { tenantId, productId: product.id },
         defaults: {
+          tenantId,
           productId: product.id,
           retailPrice: product.retailPrice || 0,
           wholesalePrice: product.wholesalePrice,
@@ -234,7 +261,8 @@ const create = async (data) => {
       // Asegurar que no tenga attributeValues (es base)
       await baseSku.setAttributeValues([], { transaction: t })
     }
-    return Product.findByPk(product.id, {
+    return Product.findOne({
+      where: { tenantId, id: product.id },
       include: [skuInclude],
       transaction: t,
     });
@@ -243,14 +271,14 @@ const create = async (data) => {
   return result;
 };
 
-const update = async (id, data) => {
-  const product = await getById(id);
+const update = async (tenantId, id, data) => {
+  const product = await getById(tenantId, id);
   if (!data.slug && data.name) {
     data.slug = slugify(data.name);
   }
 
   if (data.slug && data.slug !== product.slug) {
-    const existing = await Product.findOne({ where: { slug: data.slug } })
+    const existing = await Product.findOne({ where: { tenantId, slug: data.slug } })
     if (existing && existing.id !== product.id) {
       throw Object.assign(new Error('Ya existe un producto con ese slug'), { status: 400 })
     }
@@ -273,12 +301,12 @@ const update = async (id, data) => {
     }
     if (skus && skus.length > 0) {
       const basePrices = { retailPrice: product.retailPrice, wholesalePrice: product.wholesalePrice, wholesaleMinQty: product.wholesaleMinQty }
-      await syncSkus(product.id, skus, basePrices, t);
+      await syncSkus(tenantId, product.id, skus, basePrices, t);
       const allAttrIds = skus.flatMap(s => s.attributeValueIds || []).filter(Boolean)
       let hasUnitType = false
       if (allAttrIds.length > 0) {
         const vals = await AttributeValue.findAll({
-          where: { id: allAttrIds },
+          where: { tenantId, id: allAttrIds },
           include: [{ model: Attribute, as: 'attribute', attributes: ['unitType'] }],
           transaction: t
         })
@@ -290,8 +318,9 @@ const update = async (id, data) => {
       }
     } else {
       // Producto simple: destruir SKUs viejos (incluye variantes) y crear el SKU base
-      await ProductSku.destroy({ where: { productId: product.id }, transaction: t })
+      await ProductSku.destroy({ where: { tenantId, productId: product.id }, transaction: t })
       await ProductSku.create({
+        tenantId,
         productId: product.id,
         retailPrice: product.retailPrice || 0,
         wholesalePrice: product.wholesalePrice,
@@ -303,19 +332,19 @@ const update = async (id, data) => {
         status: 'active',
       }, { transaction: t })
     }
-    return Product.findByPk(id, { include: [skuInclude], transaction: t });
+    return Product.findOne({ where: { tenantId, id }, include: [skuInclude], transaction: t });
   });
 
   return result;
 };
 
-const remove = async (id) => {
-  const product = await getById(id);
+const remove = async (tenantId, id) => {
+  const product = await getById(tenantId, id);
   return product.destroy();
 };
 
-const toggleStatus = async (id, status) => {
-  const product = await Product.findByPk(id);
+const toggleStatus = async (tenantId, id, status) => {
+  const product = await Product.findOne({ where: { tenantId, id } });
   if (!product) throw Object.assign(new Error('Producto no encontrado'), { status: 404 });
   await product.update({ status });
   return product;
@@ -323,13 +352,13 @@ const toggleStatus = async (id, status) => {
 
 const CHUNK = 150;
 
-const bulkCreate = async (products, categoryId) => {
+const bulkCreate = async (tenantId, products, categoryId) => {
   const hasVariants = products.some(p => p.skus?.length > 0)
 
   if (!hasVariants) {
     // Fast path: productos simples, bulkCreate
     const existingSlugs = new Set(
-      (await Product.findAll({ attributes: ["slug"] })).map((p) => p.slug),
+      (await Product.findAll({ where: { tenantId }, attributes: ["slug"] })).map((p) => p.slug),
     )
     const used = new Set([...existingSlugs])
     const warnings = []
@@ -344,7 +373,7 @@ const bulkCreate = async (products, categoryId) => {
       const retailPrice = Number(p.price) || 0
       const { comparePrice, discountPercentage } = resolveDiscountFields(retailPrice, p.comparePrice, p.discountPercentage)
       return {
-        name: p.name, slug, retailPrice, status: "draft", categoryId: categoryId || null,
+        tenantId, name: p.name, slug, retailPrice, status: "draft", categoryId: categoryId || null,
         ...(p.description != null && p.description !== "" && { description: String(p.description) }),
         ...(discountPercentage != null && { discountPercentage }),
         ...(comparePrice != null && { comparePrice }),
@@ -361,6 +390,7 @@ const bulkCreate = async (products, categoryId) => {
         const chunkProducts = products.slice(i, i + CHUNK)
         const created = await Product.bulkCreate(chunk, { validate: true, transaction: t })
         await ProductSku.bulkCreate(created.map((p, idx) => ({
+          tenantId,
           productId: p.id, retailPrice: p.retailPrice || 0,
           wholesalePrice: p.wholesalePrice || null, wholesaleMinQty: p.wholesaleMinQty || null,
           stock: chunkProducts[idx]?.stock ?? 0, sku: chunkProducts[idx]?.sku || null, images: [], sortOrder: 0, status: "active",
@@ -372,7 +402,7 @@ const bulkCreate = async (products, categoryId) => {
   }
 
   // Slow path: productos con variantes, create individual + findOrCreate attributes
-  const existingSlugs = new Set((await Product.findAll({ attributes: ["slug"] })).map((p) => p.slug))
+  const existingSlugs = new Set((await Product.findAll({ where: { tenantId }, attributes: ["slug"] })).map((p) => p.slug))
   const used = new Set([...existingSlugs])
   const warnings = []
   const createdAttributes = []
@@ -393,7 +423,7 @@ const bulkCreate = async (products, categoryId) => {
       const { comparePrice, discountPercentage } = resolveDiscountFields(retailPrice, p.comparePrice, p.discountPercentage)
 
       const productData = {
-        name: p.name, slug, retailPrice, status: "draft", categoryId: categoryId || null,
+        tenantId, name: p.name, slug, retailPrice, status: "draft", categoryId: categoryId || null,
         ...(p.description != null && p.description !== "" && { description: String(p.description) }),
         ...(discountPercentage != null && { discountPercentage }),
         ...(comparePrice != null && { comparePrice }),
@@ -416,16 +446,16 @@ const bulkCreate = async (products, categoryId) => {
           if (sku.attrValues?.length > 0) {
             for (const { attrName, value } of sku.attrValues) {
               const [attr, attrCreated] = await Attribute.findOrCreate({
-                where: { name: { [require('sequelize').Op.iLike]: attrName } },
-                defaults: { name: attrName, sortOrder: 0 },
+                where: { tenantId, name: { [require('sequelize').Op.iLike]: attrName } },
+                defaults: { tenantId, name: attrName, sortOrder: 0 },
                 transaction: t,
               })
               if (attrCreated && !createdAttributes.includes(attr.name)) {
                 createdAttributes.push(attr.name)
               }
               const [attrValue] = await AttributeValue.findOrCreate({
-                where: { attributeId: attr.id, value: { [require('sequelize').Op.iLike]: value } },
-                defaults: { attributeId: attr.id, value, sortOrder: 0 },
+                where: { tenantId, attributeId: attr.id, value: { [require('sequelize').Op.iLike]: value } },
+                defaults: { tenantId, attributeId: attr.id, value, sortOrder: 0 },
                 transaction: t,
               })
               attributeValueIds.push(attrValue.id)
@@ -448,12 +478,12 @@ const bulkCreate = async (products, categoryId) => {
             attributeValueIds,
           })
         }
-        await syncSkus(product.id, skuList, basePrices, t)
+        await syncSkus(tenantId, product.id, skuList, basePrices, t)
 
         let hasUnitType = false
         if (allAttrIds.length > 0) {
           const vals = await AttributeValue.findAll({
-            where: { id: allAttrIds },
+            where: { tenantId, id: allAttrIds },
             include: [{ model: Attribute, as: 'attribute', attributes: ['unitType'] }],
             transaction: t,
           })
@@ -466,6 +496,7 @@ const bulkCreate = async (products, categoryId) => {
       } else {
         // Producto simple con variantes en el batch → SKU base
         await ProductSku.create({
+          tenantId,
           productId: product.id, retailPrice: retailPrice || 0,
           wholesalePrice: productData.wholesalePrice || null,
           wholesaleMinQty: productData.wholesaleMinQty || null,
@@ -490,8 +521,9 @@ const productHasOnlyUnitAttributes = (product) => {
   return skus.some(s => (s.attributeValues || []).length > 0 && s.attributeValues.some(av => av.attribute?.unitType))
 }
 
-const exportToExcel = async () => {
+const exportToExcel = async (tenantId) => {
   const products = await Product.findAll({
+    where: { tenantId },
     order: [['name', 'ASC']],
     include: [
       skuInclude,
@@ -675,7 +707,7 @@ function buildProductUpdate(field, newValue, product) {
   return { [field]: toDbValue(field, newValue) }
 }
 
-const previewDiff = async (field, products) => {
+const previewDiff = async (tenantId, field, products) => {
   const productKey = FIELD_TO_PRODUCT_KEY[field]
   const skuKey = FIELD_TO_SKU_KEY[field]
 
@@ -685,7 +717,7 @@ const previewDiff = async (field, products) => {
   for (let i = 0; i < allSlugs.length; i += BULK_CHUNK) {
     const chunkSlugs = allSlugs.slice(i, i + BULK_CHUNK)
     const existing = await Product.findAll({
-      where: { slug: chunkSlugs },
+      where: { tenantId, slug: chunkSlugs },
       include: [skuInclude],
     })
     const productMap = {}
@@ -730,7 +762,7 @@ const previewDiff = async (field, products) => {
   return { field, total: products.length, diffs }
 }
 
-const bulkUpdate = async (field, products) => {
+const bulkUpdate = async (tenantId, field, products) => {
   const productKey = FIELD_TO_PRODUCT_KEY[field]
   const skuKey = FIELD_TO_SKU_KEY[field]
 
@@ -746,7 +778,7 @@ const bulkUpdate = async (field, products) => {
   for (let i = 0; i < allSlugs.length; i += BULK_CHUNK) {
     const chunkSlugs = allSlugs.slice(i, i + BULK_CHUNK)
     const existing = await Product.findAll({
-      where: { slug: chunkSlugs },
+      where: { tenantId, slug: chunkSlugs },
       include: [skuInclude],
     })
     const productMap = {}
@@ -832,7 +864,7 @@ const bulkUpdate = async (field, products) => {
   return { updated, skipped, warnings }
 }
 
-const systemUpdate = async (field, value, productIds) => {
+const systemUpdate = async (tenantId, field, value, productIds) => {
   const productKey = FIELD_TO_PRODUCT_KEY[field]
   const skuKey = FIELD_TO_SKU_KEY[field]
 
@@ -843,7 +875,7 @@ const systemUpdate = async (field, value, productIds) => {
   for (let i = 0; i < productIds.length; i += BULK_CHUNK) {
     const chunkIds = productIds.slice(i, i + BULK_CHUNK)
     const products = await Product.findAll({
-      where: { id: chunkIds },
+      where: { tenantId, id: chunkIds },
       include: [skuInclude],
     })
 

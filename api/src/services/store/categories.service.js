@@ -1,14 +1,14 @@
 const { Category } = require('../../models')
 
-const list = async () => {
+const list = async (tenantId) => {
   return Category.findAll({
-    where: { status: 'active' },
+    where: { tenantId, status: 'active' },
     order: [['order', 'ASC'], ['name', 'ASC']],
   })
 }
 
-const getBySlug = async (slug) => {
-  const category = await Category.findOne({ where: { slug } })
+const getBySlug = async (tenantId, slug) => {
+  const category = await Category.findOne({ where: { tenantId, slug } })
   if (!category) {
     throw Object.assign(new Error('Categoría no encontrada'), { status: 404 })
   }

@@ -5,10 +5,51 @@ const { User, Setting } = require('../models')
 const { getStatus } = require('./billing.service')
 const { adminOriginFromTenant } = require('../utils/adminOrigin')
 
-const getBusinessName = async () => {
-  const row = await Setting.findOne({ where: { key: 'business_name' } })
+const getBusinessName = async (tenantId) => {
+  const where = tenantId ? { key: 'business_name', tenantId } : { key: 'business_name' }
+  const row = await Setting.findOne({ where })
   return row?.value || ''
 }
+
+const generateToken = (user) => {
+  return jwt.sign(
+    { id: user.id, email: user.email, name: user.name, role: user.role || 'admin', tenantId: user.tenantId },
+    process.env.JWT_SECRET,
+    { expiresIn: '7d' }
+  )
+}
+
+const login = async (email, password, tenantId) => {
+  const billingStatus = await getStatus(tenantId)
+  const businessName = await getBusinessName(tenantId)
+
+  if (process.env.SUPER_ADMIN_EMAIL && process.env.SUPER_ADMIN_PASSWORD &&
+      email === process.env.SUPER_ADMIN_EMAIL && password === process.env.SUPER_ADMIN_PASSWORD) {
+    const superUser = { id: 0, name: 'Super Admin', email, role: 'super_admin', tenantId }
+    const token = generateToken(superUser)
+    return {
+      token,
+      user: { name: superUser.name, email: superUser.email, role: 'super_admin', tenantId, billing_status: billingStatus, business_name: businessName },
+    }
+  }
+
+  const user = await User.findOne({ where: { email, status: 'active', tenantId } })
+  if (!user) {
+    throw Object.assign(new Error('Credenciales inválidas'), { status: 401 })
+  }
+
+  const valid = await user.comparePassword(password)
+  if (!valid) {
+    throw Object.assign(new Error('Credenciales inválidas'), { status: 401 })
+  }
+
+  const token = generateToken(user)
+  return {
+    token,
+    user: { id: user.id, name: user.name, email: user.email, role: user.role, billing_status: billingStatus, business_name: businessName },
+  }
+}
+
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -144,12 +185,12 @@ const resetPassword = async (token, newPassword) => {
   return { success: true, token: token_jwt, user: { id: user.id, name: user.name, email: user.email, role: user.role } }
 }
 
-const me = async (userId) => {
-  const billingStatus = await getStatus()
-  const businessName = await getBusinessName()
+const me = async (userId, tenantId) => {
+  const billingStatus = await getStatus(tenantId)
+  const businessName = await getBusinessName(tenantId)
 
   if (!userId) {
-    return { id: 0, name: 'Super Admin', email: '', role: 'super_admin', billing_status: billingStatus, business_name: businessName }
+    return { id: 0, name: 'Super Admin', email: '', role: 'super_admin', tenantId, billing_status: billingStatus, business_name: businessName }
   }
 
   const user = await User.findByPk(userId, {

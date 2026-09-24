@@ -6,7 +6,7 @@ const upload = async (req, res, next) => {
       return res.status(400).json({ error: 'No se envió ninguna imagen' })
     }
 
-    const media = await uploadService.uploadImage(req.file.buffer, req.file.originalname, req.body.folder, req.tenant?.folderPrefix)
+    const media = await uploadService.uploadImage(req.tenant.id, req.file.buffer, req.file.originalname, req.body.folder, req.tenant?.folderPrefix)
     res.status(201).json(media)
   } catch (err) {
     next(err)
@@ -15,7 +15,7 @@ const upload = async (req, res, next) => {
 
 const list = async (req, res, next) => {
   try {
-    const media = await uploadService.list(req.query.folder, { trash: req.query.trash === 'true' })
+    const media = await uploadService.list(req.tenant.id, req.query.folder, { trash: req.query.trash === 'true' })
     res.json(media)
   } catch (err) {
     next(err)
@@ -24,7 +24,7 @@ const list = async (req, res, next) => {
 
 const remove = async (req, res, next) => {
   try {
-    await uploadService.remove(req.params.id)
+    await uploadService.remove(req.tenant.id, req.params.id)
     res.status(204).end()
   } catch (err) {
     next(err)
@@ -33,7 +33,7 @@ const remove = async (req, res, next) => {
 
 const forceDelete = async (req, res, next) => {
   try {
-    await uploadService.forceDelete(req.params.id)
+    await uploadService.forceDelete(req.tenant.id, req.params.id)
     res.status(204).end()
   } catch (err) {
     next(err)
@@ -42,7 +42,7 @@ const forceDelete = async (req, res, next) => {
 
 const restore = async (req, res, next) => {
   try {
-    const media = await uploadService.restore(req.params.id)
+    const media = await uploadService.restore(req.tenant.id, req.params.id)
     res.json(media)
   } catch (err) {
     next(err)
@@ -51,7 +51,7 @@ const restore = async (req, res, next) => {
 
 const emptyTrash = async (req, res, next) => {
   try {
-    const result = await uploadService.emptyTrash()
+    const result = await uploadService.emptyTrash(req.tenant.id)
     res.json(result)
   } catch (err) {
     next(err)
@@ -60,7 +60,7 @@ const emptyTrash = async (req, res, next) => {
 
 const usage = async (req, res, next) => {
   try {
-    const result = await uploadService.checkUsage(req.params.id)
+    const result = await uploadService.checkUsage(req.tenant.id, req.params.id)
     res.json(result)
   } catch (err) {
     next(err)
@@ -69,7 +69,7 @@ const usage = async (req, res, next) => {
 
 const move = async (req, res, next) => {
   try {
-    const media = await uploadService.moveToFolder(req.params.id, req.body.folder, req.tenant?.folderPrefix)
+    const media = await uploadService.moveToFolder(req.tenant.id, req.params.id, req.body.folder, req.tenant?.folderPrefix)
     res.json(media)
   } catch (err) {
     next(err)

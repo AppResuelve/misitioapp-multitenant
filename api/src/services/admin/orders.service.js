@@ -1,10 +1,10 @@
 const { Order } = require('../../models')
 
-const list = async (query = {}) => {
+const list = async (tenantId, query = {}) => {
   const { page = 1, limit = 20, status } = query
   const offset = (page - 1) * limit
 
-  const where = {}
+  const where = { tenantId }
   if (status) where.status = status
 
   const { count, rows } = await Order.findAndCountAll({
@@ -22,22 +22,23 @@ const list = async (query = {}) => {
   }
 }
 
-const getById = async (id) => {
-  const order = await Order.findByPk(id)
+const getById = async (tenantId, id) => {
+  const order = await Order.findOne({ where: { tenantId, id } })
   if (!order) {
     throw Object.assign(new Error('Pedido no encontrado'), { status: 404 })
   }
   return order
 }
 
-const updateStatus = async (id, status) => {
-  const order = await getById(id)
+const updateStatus = async (tenantId, id, status) => {
+  const order = await getById(tenantId, id)
   return order.update({ status })
 }
 
-const stats = async () => {
-  const total = await Order.count()
+const stats = async (tenantId) => {
+  const total = await Order.count({ where: { tenantId } })
   const byStatus = await Order.findAll({
+    where: { tenantId },
     attributes: ['status', [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count']],
     group: ['status'],
   })
@@ -47,11 +48,12 @@ const stats = async () => {
   thisMonth.setHours(0, 0, 0, 0)
 
   const monthCount = await Order.count({
-    where: { createdAt: { [require('sequelize').Op.gte]: thisMonth } },
+    where: { tenantId, createdAt: { [require('sequelize').Op.gte]: thisMonth } },
   })
 
   const monthRevenue = await Order.sum('total', {
     where: {
+      tenantId,
       createdAt: { [require('sequelize').Op.gte]: thisMonth },
       status: { [require('sequelize').Op.ne]: 'cancelled' },
     },

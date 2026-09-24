@@ -1,8 +1,7 @@
 const { Tag, TagValue, sequelize } = require("../../models");
 const { Op } = require("sequelize");
-const { getTenantId } = require("../tenantContext");
 
-const list = async (categoryId, activeTagIds = []) => {
+const list = async (tenantId, categoryId, activeTagIds = []) => {
   const tags = await Tag.findAll({
     include: [
       {
@@ -55,7 +54,6 @@ const list = async (categoryId, activeTagIds = []) => {
         ? `AND "Product"."category_id" = ${validCategoryId}`
         : "";
 
-      const tenantId = getTenantId();
       const tenantFilter = tenantId
         ? `AND "Product"."tenant_id" = ${tenantId}`
         : "";
