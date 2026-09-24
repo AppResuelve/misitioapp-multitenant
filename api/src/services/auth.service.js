@@ -50,46 +50,6 @@ const login = async (email, password, tenantId) => {
   }
 }
 
-
-const generateToken = (user) => {
-  return jwt.sign(
-    { id: user.id, email: user.email, name: user.name, role: user.role || 'admin', tenantId: user.tenantId },
-    process.env.JWT_SECRET,
-    { expiresIn: '7d' }
-  )
-}
-
-const login = async (email, password) => {
-  const billingStatus = await getStatus()
-  const businessName = await getBusinessName()
-
-  if (process.env.SUPER_ADMIN_EMAIL && process.env.SUPER_ADMIN_PASSWORD &&
-      email === process.env.SUPER_ADMIN_EMAIL && password === process.env.SUPER_ADMIN_PASSWORD) {
-    const superUser = { id: 0, name: 'Super Admin', email, role: 'super_admin' }
-    const token = generateToken(superUser)
-    return {
-      token,
-      user: { name: superUser.name, email: superUser.email, role: 'super_admin', billing_status: billingStatus, business_name: businessName },
-    }
-  }
-
-  const user = await User.findOne({ where: { email, status: 'active' } })
-  if (!user) {
-    throw Object.assign(new Error('Credenciales inválidas'), { status: 401 })
-  }
-
-  const valid = await user.comparePassword(password)
-  if (!valid) {
-    throw Object.assign(new Error('Credenciales inválidas'), { status: 401 })
-  }
-
-  const token = generateToken(user)
-  return {
-    token,
-    user: { id: user.id, name: user.name, email: user.email, role: user.role, billing_status: billingStatus, business_name: businessName },
-  }
-}
-
 const validateToken = async (token) => {
   const hash = crypto.createHash('sha256').update(token).digest('hex')
   const user = await User.findOne({
@@ -144,8 +104,8 @@ const changePassword = async (userId, newPassword) => {
 
 const emailService = require('./email.service')
 
-const forgotPassword = async (email, tenant) => {
-  const user = await User.findOne({ where: { email, status: 'active' } })
+const forgotPassword = async (tenantId, email, tenant) => {
+  const user = await User.findOne({ where: { tenantId, email, status: 'active' } })
   if (!user) {
     // No revelar si el email existe o no
     return { success: true }
