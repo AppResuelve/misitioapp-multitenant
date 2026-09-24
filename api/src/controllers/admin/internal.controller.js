@@ -113,6 +113,17 @@ const seedProducts = async (req, res, next) => {
   }
 }
 
+const ensureTenantDomain = async (tenant) => {
+  if (!tenant.domain) {
+    throw Object.assign(new Error('El tenant no tiene dominio configurado'), { status: 400 })
+  }
+  const adminDomain = `admin.${tenant.domain}`
+  if (tenant.adminDomain !== adminDomain) {
+    await tenant.update({ adminDomain })
+  }
+  return tenant
+}
+
 const createAdmin = async (req, res, next) => {
   try {
     const { email, name } = req.body
@@ -120,6 +131,8 @@ const createAdmin = async (req, res, next) => {
     if (!email || !name) {
       return res.status(400).json({ error: 'email y name son requeridos' })
     }
+
+    const tenant = await ensureTenantDomain(req.tenant)
 
     const existing = await User.findOne({ where: { tenantId, role: 'admin' } })
     if (existing) {
@@ -142,7 +155,7 @@ const createAdmin = async (req, res, next) => {
       activationSentAt: new Date(),
     })
 
-    const link = `${adminOriginFromTenant(req.tenant)}/activate/${token}`
+    const link = `${adminOriginFromTenant(tenant)}/activate/${token}`
 
     await emailService.sendActivationEmail(email, link)
 
@@ -218,7 +231,9 @@ const getAdminStatus = async (req, res, next) => {
 
 const resendActivation = async (req, res, next) => {
   try {
-    const admin = await User.findOne({ where: { tenantId: req.tenant.id, role: 'admin' } })
+    const tenant = await ensureTenantDomain(req.tenant)
+
+    const admin = await User.findOne({ where: { tenantId: tenant.id, role: 'admin' } })
     if (!admin) {
       return res.status(404).json({ error: 'No hay administrador creado' })
     }
@@ -249,7 +264,7 @@ const resendActivation = async (req, res, next) => {
       activationSentAt: now,
     })
 
-    const link = `${adminOriginFromTenant(req.tenant)}/activate/${token}`
+    const link = `${adminOriginFromTenant(tenant)}/activate/${token}`
 
     await emailService.sendActivationEmail(admin.email, link)
 
@@ -297,6 +312,37 @@ const listTenants = async (req, res, next) => {
   }
 }
 
+const updateTenant = async (req, res, next) => {
+  try {
+    const { slug } = req.params
+    const { name, domain, adminDomain, folderPrefix } = req.body
+
+    const tenant = await Tenant.findOne({ where: { slug } })
+    if (!tenant) {
+      return res.status(404).json({ error: 'Tenant no encontrado' })
+    }
+
+    const updates = {}
+    if (name !== undefined) updates.name = name || tenant.name
+    if (domain !== undefined) updates.domain = domain || null
+    if (adminDomain !== undefined) updates.adminDomain = adminDomain || null
+    if (folderPrefix !== undefined) updates.folderPrefix = folderPrefix || null
+
+    await tenant.update(updates)
+
+    res.json({
+      id: tenant.id,
+      slug: tenant.slug,
+      name: tenant.name,
+      domain: tenant.domain,
+      adminDomain: tenant.adminDomain,
+      folderPrefix: tenant.folderPrefix,
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
 const setBillingStatus = async (req, res, next) => {
   try {
     const { status } = req.body
@@ -318,4 +364,4 @@ const getBillingStatus = async (req, res, next) => {
   }
 }
 
-module.exports = { createTenant, listTenants, createAdmin, seedSettings, seedProducts, seedServices, getAdminStatus, resendActivation, setBillingStatus, getBillingStatus }
+module.exports = { createTenant, listTenants, updateTenant, createAdmin, seedSettings, seedProducts, seedServices, getAdminStatus, resendActivation, setBillingStatus, getBillingStatus }

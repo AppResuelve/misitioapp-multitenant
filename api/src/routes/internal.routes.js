@@ -7,6 +7,7 @@ const router = require('express').Router()
 // Gestión de tenants (sin resolveTenant: operan sobre la tabla tenants)
 router.post('/tenants', internalAuth, internalController.createTenant)
 router.get('/tenants', internalAuth, internalController.listTenants)
+router.put('/tenants/:slug', internalAuth, internalController.updateTenant)
 
 // Endpoints que operan sobre un tenant específico (requieren X-Tenant-Slug)
 router.post('/create-admin', internalAuth, resolveTenant, internalController.createAdmin)
