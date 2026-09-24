@@ -2,10 +2,11 @@ const authMiddleware = require('../middleware/auth')
 const storeStatusMiddleware = require('../middleware/storeStatus')
 const resolveTenant = require('../middleware/resolveTenant')
 const billingGuard = require('../middleware/billingGuard')
-const { authLimiter, generalLimiter } = require('../middleware/rateLimiter')
+const { authLimiter, generalLimiter, globalIpLimiter } = require('../middleware/rateLimiter')
 
 const mountRoutes = (app) => {
-  // Aplicar rate limiting general a toda la API
+  // Aplicar rate limiting a toda la API
+  app.use('/api', globalIpLimiter)
   app.use('/api', generalLimiter)
 
   // Auth (pública) — resuelve tenant por X-Tenant-Slug
