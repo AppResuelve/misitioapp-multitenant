@@ -24,6 +24,7 @@ const mountRoutes = (app) => {
   app.use('/api/admin/services', require('./admin/services.routes'))
   app.use('/api/admin/attributes', require('./admin/attributes.routes'))
   app.use('/api/admin/tags', require('./admin/tags.routes'))
+  app.use('/api/admin/discounts', require('./admin/discounts.routes'))
 
   // Internal (requiere APPRESUELVE_SECRET — tenant explícito en cada endpoint)
   app.use('/api/internal', require('./internal.routes'))
@@ -35,6 +36,7 @@ const mountRoutes = (app) => {
   app.use('/api/store/orders', resolveTenant, storeStatusMiddleware, require('./store/orders.routes'))
   app.use('/api/store/services', resolveTenant, storeStatusMiddleware, require('./store/services.routes'))
   app.use('/api/store/tags', resolveTenant, storeStatusMiddleware, require('./store/tags.routes'))
+  app.use('/api/store/discounts', resolveTenant, require('./store/discounts.routes'))
 }
 
 module.exports = mountRoutes

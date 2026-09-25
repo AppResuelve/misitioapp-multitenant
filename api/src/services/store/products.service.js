@@ -10,6 +10,7 @@ const {
 } = require("../../models");
 const { Op } = require("sequelize");
 const { applyUnitPricing } = require("../../utils/unitPricing");
+const { getActiveDiscounts, resolveProductPricing } = require("./discounts.service");
 const sanitizeHtml = require("sanitize-html");
 
 const sanitizeDescription = (html) =>
@@ -166,6 +167,10 @@ const list = async (tenantId, query = {}) => {
 
   products.forEach(applyUnitPricing);
 
+  const discounts = await getActiveDiscounts(tenantId);
+  const productDiscounts = discounts.filter((d) => d.type !== "cart_total");
+  products.forEach((p) => resolveProductPricing(p, productDiscounts));
+
   return {
     products,
     total,
@@ -187,6 +192,11 @@ const getBySlug = async (tenantId, slug) => {
     throw Object.assign(new Error('Producto no encontrado'), { status: 404 });
   }
   applyUnitPricing(product);
+
+  const discounts = await getActiveDiscounts(tenantId);
+  const productDiscounts = discounts.filter((d) => d.type !== "cart_total");
+  resolveProductPricing(product, productDiscounts);
+
   product.description = sanitizeDescription(product.description);
   return product;
 };
