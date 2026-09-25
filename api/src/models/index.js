@@ -24,7 +24,7 @@ const models = {
 // Modelos que pertenecen a un tenant (todos menos Tenant)
 const TENANTED_MODELS = [
   'User', 'Category', 'Product', 'Order', 'Setting', 'Media', 'ChangeRequest',
-  'Service', 'Attribute', 'AttributeValue', 'ProductSku', 'SkuAttributeValue',
+  'Service', 'Attribute', 'AttributeValue', 'ProductSku',
   'ServiceVariant', 'ServiceVariantModifier', 'Tag', 'TagValue', 'Discount',
 ]
 

@@ -33,27 +33,24 @@ const computeProductDiscount = (discounts, product) => {
 }
 
 // Aplica los descuentos por tipo sobre el precio base del producto (que ya trae
-// el descuento individual). Recalcula retailPrice final, comparePrice y el % efectivo.
+// el descuento individual). Recalcula retailPrice final, comparePrice y el % efectivo,
+// y propaga el resultado a cada variante (SKU) de forma dinámica (sin persistir).
 const resolveProductPricing = (product, discounts) => {
   const { applied, totalPercentage } = computeProductDiscount(discounts, product)
 
-  if (totalPercentage <= 0) {
-    product.setDataValue('hasActiveDiscount', (Number(product.discountPercentage) || 0) > 0)
-    product.setDataValue('appliedDiscounts', [])
-    return product
-  }
-
+  const individualPct = Number(product.discountPercentage) || 0
   const retailPriceBase = Number(product.retailPrice) || 0
   const finalPrice = round2(retailPriceBase * (1 - totalPercentage / 100))
 
-  const individualPct = Number(product.discountPercentage) || 0
   let original = product.comparePrice != null ? Number(product.comparePrice) : null
   if (!original && individualPct > 0 && retailPriceBase > 0) {
     original = retailPriceBase / (1 - individualPct / 100)
   }
-  if (!original) original = retailPriceBase
+  if (!original && totalPercentage > 0) {
+    original = retailPriceBase
+  }
 
-  const effectivePct = original > finalPrice
+  const effectivePct = (original && original > finalPrice)
     ? Math.round(100 * (1 - finalPrice / original))
     : Math.round(totalPercentage)
 
@@ -62,6 +59,25 @@ const resolveProductPricing = (product, discounts) => {
   product.discountPercentage = effectivePct > 0 ? effectivePct : null
   product.setDataValue('hasActiveDiscount', effectivePct > 0)
   product.setDataValue('appliedDiscounts', applied.map((d) => ({ id: d.id, name: d.name, percentage: d.percentage })))
+
+  // Propagar a cada variante
+  for (const sku of product.skus || []) {
+    const skuBase = Number(sku.retailPrice) || 0
+    if (skuBase <= 0) continue
+
+    const skuFinal = round2(skuBase * (1 - totalPercentage / 100))
+
+    let skuOriginal = null
+    if (individualPct > 0 && individualPct < 100) {
+      skuOriginal = skuBase / (1 - individualPct / 100)
+    } else if (totalPercentage > 0) {
+      skuOriginal = skuBase
+    }
+
+    sku.retailPrice = skuFinal
+    sku.setDataValue('comparePrice', (skuOriginal && skuOriginal > skuFinal) ? round2(skuOriginal) : null)
+    sku.setDataValue('discountPercentage', effectivePct > 0 ? effectivePct : null)
+  }
 
   return product
 }
