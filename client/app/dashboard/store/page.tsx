@@ -21,6 +21,7 @@ export default function Store() {
   const [saving, setSaving] = useState(false)
   const [scale, setScale] = useState(0.5)
   const [iframeKey, setIframeKey] = useState(0)
+  const [domain, setDomain] = useState(null)
   const containerRef = useRef(null)
   const current = STORE_STATUS.find((s) => s.value === status) || STORE_STATUS[0]
   const StatusIcon = current.icon
@@ -29,6 +30,7 @@ export default function Store() {
     api.get('/admin/settings')
       .then(({ data }) => {
         if (data.store_status) setStatus(data.store_status)
+        if (data.domain) setDomain(data.domain)
       })
       .catch(() => {})
   }, [])
@@ -56,14 +58,15 @@ export default function Store() {
     setSaving(false)
   }
 
-  const storeUrl = process.env.NEXT_PUBLIC_STORE_URL;
-  const [copied, setCopied] = useState(false);
+  const storeUrl = domain ? `https://${domain}` : null
+  const [copied, setCopied] = useState(false)
 
   const handleCopyUrl = () => {
-    navigator.clipboard.writeText(storeUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+    if (!storeUrl) return
+    navigator.clipboard.writeText(storeUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -74,13 +77,15 @@ export default function Store() {
           <p className="text-sm text-zinc-500">Vista previa de tu sitio público</p>
         </div>
         <div className="flex items-center gap-2 pl-2">
-          <button
-            onClick={handleCopyUrl}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 transition-colors text-sm font-medium"
-          >
-            {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-            URL
-          </button>
+          {storeUrl && (
+            <button
+              onClick={handleCopyUrl}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 transition-colors text-sm font-medium"
+            >
+              {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              Copiar URL
+            </button>
+          )}
           {storeUrl && (
             <a
               href={storeUrl}

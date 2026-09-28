@@ -1,9 +1,16 @@
 const settingsService = require('../../services/admin/settings.service')
+const { Tenant } = require('../../models')
 
 const getAll = async (req, res, next) => {
   try {
-    const settings = await settingsService.getAll(req.tenant.id)
-    res.json(settings)
+    const [settings, tenant] = await Promise.all([
+      settingsService.getAll(req.tenant.id),
+      Tenant.findByPk(req.tenant.id, { attributes: ['domain'] }),
+    ])
+    res.json({
+      ...settings,
+      domain: tenant?.domain || null,
+    })
   } catch (err) {
     next(err)
   }
