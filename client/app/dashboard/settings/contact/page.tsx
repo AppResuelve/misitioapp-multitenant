@@ -1,7 +1,7 @@
 // @ts-nocheck
 'use client'
-import { useState, useEffect } from 'react'
-import { Plus, Edit, Trash2 } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Plus, Edit, Trash2, GripVertical } from 'lucide-react'
 import { Button, Input } from '@/components/admin/ui/Form'
 import { Modal } from '@/components/admin/ui/Modal'
 import { Spinner } from '@/components/admin/ui/Spinner'
@@ -16,6 +16,10 @@ export default function ContactSettings() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [ordered, setOrdered] = useState([])
+  const [toggling, setToggling] = useState(null)
+  const dragItem = useRef(null)
+  const dragOverItem = useRef(null)
 
   // Form state
   const [name, setName] = useState('')
@@ -31,10 +35,54 @@ export default function ContactSettings() {
     try {
       const { data } = await api.get('/admin/branches')
       setBranches(data)
+      setOrdered(data)
     } catch {
       // silent fail
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDragStart = (index) => {
+    dragItem.current = index
+  }
+
+  const handleDragEnter = (index) => {
+    dragOverItem.current = index
+  }
+
+  const handleDragEnd = async () => {
+    const from = dragItem.current
+    const to = dragOverItem.current
+    if (from === null || to === null || from === to) return
+
+    const reordered = [...ordered]
+    const [moved] = reordered.splice(from, 1)
+    reordered.splice(to, 0, moved)
+    setOrdered(reordered)
+
+    dragItem.current = null
+    dragOverItem.current = null
+
+    try {
+      await api.put('/admin/branches/reorder', {
+        orderedIds: reordered.map((b) => b.id),
+      })
+    } catch {
+      Alert.fire({ message: 'Error al reordenar', type: 'error' })
+      fetchBranches()
+    }
+  }
+
+  const handleToggle = async (id, currentStatus) => {
+    setToggling(id)
+    try {
+      await api.patch(`/admin/branches/${id}/toggle-status`)
+      await fetchBranches()
+    } catch {
+      Alert.fire({ message: 'Error al cambiar estado', type: 'error' })
+    } finally {
+      setToggling(null)
     }
   }
 
@@ -131,15 +179,29 @@ export default function ContactSettings() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-zinc-800">
+                <th className="w-12"></th>
                 <th className="text-left text-xs font-semibold text-zinc-500 uppercase tracking-wider px-6 py-3">Nombre</th>
                 <th className="text-left text-xs font-semibold text-zinc-500 uppercase tracking-wider px-6 py-3">Teléfono</th>
-                <th className="text-left text-xs font-semibold text-zinc-500 uppercase tracking-wider px-6 py-3">Dirección</th>
+                <th className="text-left text-xs font-semibold text-zinc-500 uppercase tracking-wider px-6 py-3">Estado</th>
                 <th className="text-right text-xs font-semibold text-zinc-500 uppercase tracking-wider px-6 py-3">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {branches.map((branch) => (
-                <tr key={branch.id} className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50">
+              {ordered.map((branch, index) => (
+                <tr
+                  key={branch.id}
+                  draggable
+                  onDragStart={() => handleDragStart(index)}
+                  onDragEnter={() => handleDragEnter(index)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={(e) => e.preventDefault()}
+                  className={`border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50 transition-opacity ${
+                    dragItem.current === index ? 'opacity-50' : ''
+                  }`}
+                >
+                  <td className="pl-4 pr-2 py-4 cursor-grab">
+                    <GripVertical className="w-4 h-4 text-zinc-600 hover:text-zinc-400 transition-colors" />
+                  </td>
                   <td className="px-6 py-4">
                     <span className="text-sm font-medium text-zinc-100">{branch.name}</span>
                   </td>
@@ -147,7 +209,18 @@ export default function ContactSettings() {
                     <span className="text-sm text-zinc-400">{branch.phone}</span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="text-sm text-zinc-400">{branch.address || '—'}</span>
+                    <button
+                      onClick={() => handleToggle(branch.id, branch.isActive)}
+                      disabled={toggling === branch.id}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                        branch.isActive
+                          ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                          : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
+                      } ${toggling === branch.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${branch.isActive ? 'bg-emerald-400' : 'bg-zinc-500'}`} />
+                      {branch.isActive ? 'Activa' : 'Inactiva'}
+                    </button>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-2">
