@@ -15,14 +15,32 @@ const DAYS = [
 const DAY_NAMES = { mon: 'Lunes', tue: 'Martes', wed: 'Miércoles', thu: 'Jueves', fri: 'Viernes', sat: 'Sábado', sun: 'Domingo' }
 const DAY_ORDER = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7 }
 
+function hasGaps(sortedDays) {
+  for (let i = 1; i < sortedDays.length; i++) {
+    if (DAY_ORDER[sortedDays[i]] - DAY_ORDER[sortedDays[i - 1]] > 1) {
+      return true
+    }
+  }
+  return false
+}
+
+function formatDaysLabel(sortedDays) {
+  if (sortedDays.length === 0) return ''
+  if (sortedDays.length === 1) return sortedDays[0]
+  if (sortedDays.length === 2) return `${sortedDays[0]} y ${sortedDays[1]}`
+  if (!hasGaps(sortedDays)) {
+    return `${sortedDays[0]} a ${sortedDays[sortedDays.length - 1]}`
+  }
+  return sortedDays.slice(0, -1).join(', ') + ' y ' + sortedDays[sortedDays.length - 1]
+}
+
 function formatPreview(schedules) {
   if (!schedules || schedules.length === 0) return ''
   return schedules.map((block) => {
     if (!block.days || block.days.length === 0) return ''
     const sorted = [...block.days].sort((a, b) => DAY_ORDER[a] - DAY_ORDER[b])
-    const daysLabel = sorted.length > 2
-      ? `${DAY_NAMES[sorted[0]].slice(0, 3)} a ${DAY_NAMES[sorted[sorted.length - 1]].slice(0, 3)}`
-      : sorted.map((d) => DAY_NAMES[d]).join(' y ')
+    const abbreviated = sorted.map((d) => DAY_NAMES[d].slice(0, 3))
+    const daysLabel = formatDaysLabel(abbreviated)
     const timesLabel = (block.timeRanges || []).map((r) => `${r.open} a ${r.close}`).join(' / ') || 'Sin horario'
     return `${daysLabel}: ${timesLabel}`
   }).filter(Boolean).join('\n')
