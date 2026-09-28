@@ -202,11 +202,11 @@ export default function Sidebar({ open, onClose, logoUrl }) {
       </nav>
 
       {/* Settings expandable */}
-      <div className="border-t border-zinc-800 shrink-0">
+      <div className="border-t border-zinc-800 pt-2 pb-2 mb-safe">
         <button
           onClick={handleSettingsToggle}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mx-3 mt-2 ${
-            settingsOpen || pathname.startsWith("/dashboard/settings")
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mx-3 ${
+            settingsOpen
               ? "bg-cyan-500/10 text-cyan-400"
               : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
           }`}
@@ -216,19 +216,19 @@ export default function Sidebar({ open, onClose, logoUrl }) {
           {settingsOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </button>
         {settingsOpen && (
-          <div className="pb-2">
+          <div className="mt-1">
             {SETTINGS_ITEMS.map((item) => (
               <Link
                 key={item.to}
                 href={item.to}
                 onClick={async (e) => {
                   e.preventDefault()
-                  if (await confirmLeave()) { onClose(); setSettingsOpen(false); router.push(item.to) }
+                  if (await confirmLeave()) { onClose(); router.push(item.to) }
                 }}
-                className={`flex items-center gap-3 pl-10 pr-4 py-2.5 text-sm transition-colors ${
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors mx-3 ${
                   pathname.startsWith(item.to)
-                    ? "text-cyan-400"
-                    : "text-zinc-400 hover:text-zinc-200"
+                    ? "bg-cyan-500/10 text-cyan-400"
+                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
                 }`}
               >
                 <item.icon className="w-3.5 h-3.5" />
@@ -246,7 +246,7 @@ export default function Sidebar({ open, onClose, logoUrl }) {
       {/* Overlay mobile */}
       {open && (
         <div
-          className="lg:hidden fixed inset-0 bg-black/50 z-40"
+          className="lg:hidden fixed inset-0 pb-safe bg-black/50 z-40"
           onClick={onClose}
         />
       )}
@@ -254,7 +254,7 @@ export default function Sidebar({ open, onClose, logoUrl }) {
       {/* Sidebar */}
       <aside
         className={`
-          fixed left-0 top-0 h-full w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col z-50
+          fixed left-0 top-0 bottom-0 w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col z-50
           transition-transform duration-300
           lg:translate-x-0
           ${open ? "translate-x-0" : "-translate-x-full"}
