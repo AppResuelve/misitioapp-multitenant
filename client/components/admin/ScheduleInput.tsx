@@ -24,14 +24,17 @@ function hasGaps(sortedDays) {
   return false
 }
 
-function formatDaysLabel(sortedDays) {
-  if (sortedDays.length === 0) return ''
-  if (sortedDays.length === 1) return sortedDays[0]
-  if (sortedDays.length === 2) return `${sortedDays[0]} y ${sortedDays[1]}`
-  if (!hasGaps(sortedDays)) {
-    return `${sortedDays[0]} a ${sortedDays[sortedDays.length - 1]}`
+function formatDaysLabel(sortedShortDays) {
+  if (sortedShortDays.length === 0) return ''
+  if (sortedShortDays.length === 1) return DAY_NAMES[sortedShortDays[0]].slice(0, 3)
+  if (sortedShortDays.length === 2) {
+    return `${DAY_NAMES[sortedShortDays[0]].slice(0, 3)} y ${DAY_NAMES[sortedShortDays[1]].slice(0, 3)}`
   }
-  return sortedDays.slice(0, -1).join(', ') + ' y ' + sortedDays[sortedDays.length - 1]
+  if (!hasGaps(sortedShortDays)) {
+    return `${DAY_NAMES[sortedShortDays[0]].slice(0, 3)} a ${DAY_NAMES[sortedShortDays[sortedShortDays.length - 1]].slice(0, 3)}`
+  }
+  const abbreviated = sortedShortDays.map((d) => DAY_NAMES[d].slice(0, 3))
+  return abbreviated.slice(0, -1).join(', ') + ' y ' + abbreviated[abbreviated.length - 1]
 }
 
 function formatPreview(schedules) {
@@ -39,8 +42,7 @@ function formatPreview(schedules) {
   return schedules.map((block) => {
     if (!block.days || block.days.length === 0) return ''
     const sorted = [...block.days].sort((a, b) => DAY_ORDER[a] - DAY_ORDER[b])
-    const abbreviated = sorted.map((d) => DAY_NAMES[d].slice(0, 3))
-    const daysLabel = formatDaysLabel(abbreviated)
+    const daysLabel = formatDaysLabel(sorted)
     const timesLabel = (block.timeRanges || []).map((r) => `${r.open} a ${r.close}`).join(' / ') || 'Sin horario'
     return `${daysLabel}: ${timesLabel}`
   }).filter(Boolean).join('\n')
