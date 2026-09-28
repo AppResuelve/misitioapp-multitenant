@@ -12,7 +12,9 @@ module.exports = (sequelize, DataTypes) => {
     underscored: true,
   })
 
-  Tenant.associate = () => {}
+  Tenant.associate = (models) => {
+    Tenant.hasMany(models.Branch, { foreignKey: 'tenantId', as: 'branches' });
+  };
 
   return Tenant
 }
