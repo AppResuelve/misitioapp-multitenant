@@ -2,10 +2,11 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { Plus, Edit, Trash2 } from 'lucide-react'
-import { Button, Input, Textarea } from '@/components/admin/ui/Form'
+import { Button, Input } from '@/components/admin/ui/Form'
 import { Modal } from '@/components/admin/ui/Modal'
 import { Spinner } from '@/components/admin/ui/Spinner'
 import { useAlert } from '@/components/admin/ui/AlertContext'
+import ScheduleInput from '@/components/admin/ScheduleInput'
 import api from '@/services/admin-api'
 
 export default function ContactSettings() {
@@ -20,7 +21,7 @@ export default function ContactSettings() {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
-  const [hours, setHours] = useState('')
+  const [hours, setHours] = useState([])
 
   useEffect(() => {
     fetchBranches()
@@ -42,7 +43,7 @@ export default function ContactSettings() {
     setName('')
     setPhone('')
     setAddress('')
-    setHours('')
+    setHours([])
     setModalOpen(true)
   }
 
@@ -51,7 +52,7 @@ export default function ContactSettings() {
     setName(branch.name)
     setPhone(branch.phone)
     setAddress(branch.address || '')
-    setHours(branch.hours || '')
+    setHours(branch.hours ? JSON.parse(branch.hours) : [])
     setModalOpen(true)
   }
 
@@ -68,7 +69,7 @@ export default function ContactSettings() {
         name,
         phone,
         address: address || null,
-        hours: hours || null,
+        hours: JSON.stringify(hours),
       }
       if (editing) {
         await api.put(`/admin/branches/${editing.id}`, payload)
@@ -200,12 +201,9 @@ export default function ContactSettings() {
             onChange={(e) => setAddress(e.target.value)}
             placeholder="Av. Paraguay 78"
           />
-          <Textarea
-            label="Horarios"
+          <ScheduleInput
             value={hours}
-            onChange={(e) => setHours(e.target.value)}
-            placeholder="Lun a vie: 8:30 a 12:30 y 16:30 a 20:30&#10;Sáb: 9 a 13"
-            rows={3}
+            onChange={(val) => setHours(val)}
           />
           <div className="flex gap-3 justify-end pt-2">
             <Button type="button" variant="secondary" onClick={closeModal}>

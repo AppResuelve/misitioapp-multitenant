@@ -20,6 +20,10 @@ import {
   ChevronRight,
   FolderOpen,
   Percent,
+  Globe,
+  CreditCard,
+  Database,
+  HelpCircle,
 } from "lucide-react";
 import { useUnsavedChanges } from "@/context/UnsavedChangesContext";
 
@@ -57,11 +61,11 @@ const NAV_CONFIG = [
 ]
 
 const SETTINGS_ITEMS = [
-  { to: "/dashboard/settings/general", label: "General" },
-  { to: "/dashboard/settings/contact", label: "Contacto" },
-  { to: "/dashboard/settings/billing", label: "Facturación" },
-  { to: "/dashboard/settings/data", label: "Datos" },
-  { to: "/dashboard/settings/help", label: "Ayuda" },
+  { to: "/dashboard/settings/general", label: "General", icon: Globe },
+  { to: "/dashboard/settings/contact", label: "Contacto", icon: Settings },
+  { to: "/dashboard/settings/billing", label: "Facturación", icon: CreditCard },
+  { to: "/dashboard/settings/data", label: "Datos", icon: Database },
+  { to: "/dashboard/settings/help", label: "Ayuda", icon: HelpCircle },
 ]
 
 export default function Sidebar({ open, onClose, logoUrl }) {
@@ -73,13 +77,15 @@ export default function Sidebar({ open, onClose, logoUrl }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const toggleSubmenu = (label: string) => {
+    if (settingsOpen) setSettingsOpen(false);
     setOpenSubmenus(prev =>
       prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]
     )
   }
 
   const handleSettingsToggle = () => {
-    setSettingsOpen(!settingsOpen);
+    if (openSubmenus.length > 0) setOpenSubmenus([]);
+    setSettingsOpen(prev => !prev);
   }
 
   useEffect(() => {
@@ -135,10 +141,7 @@ export default function Sidebar({ open, onClose, logoUrl }) {
                 return (
                   <div key={item.label}>
                     <button
-                      onClick={() => {
-                        if (settingsOpen) setSettingsOpen(false);
-                        toggleSubmenu(item.label);
-                      }}
+                      onClick={() => toggleSubmenu(item.label)}
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                         isActive
                           ? "bg-cyan-500/10 text-cyan-400"
@@ -201,11 +204,8 @@ export default function Sidebar({ open, onClose, logoUrl }) {
       {/* Settings expandable */}
       <div className="border-t border-zinc-800 shrink-0">
         <button
-          onClick={() => {
-            if (openSubmenus.length > 0) setOpenSubmenus([]);
-            handleSettingsToggle();
-          }}
-          className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${
+          onClick={handleSettingsToggle}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mx-3 mt-2 ${
             settingsOpen || pathname.startsWith("/dashboard/settings")
               ? "bg-cyan-500/10 text-cyan-400"
               : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
@@ -225,12 +225,13 @@ export default function Sidebar({ open, onClose, logoUrl }) {
                   e.preventDefault()
                   if (await confirmLeave()) { onClose(); setSettingsOpen(false); router.push(item.to) }
                 }}
-                className={`flex items-center gap-3 pl-10 pr-4 py-2 text-sm transition-colors ${
+                className={`flex items-center gap-3 pl-10 pr-4 py-2.5 text-sm transition-colors ${
                   pathname.startsWith(item.to)
                     ? "text-cyan-400"
                     : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
+                <item.icon className="w-3.5 h-3.5" />
                 {item.label}
               </Link>
             ))}

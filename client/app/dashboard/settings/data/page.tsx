@@ -22,7 +22,7 @@ export default function DataSettings() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       <h1 className="text-2xl font-bold text-zinc-100 mb-6">Datos</h1>
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">

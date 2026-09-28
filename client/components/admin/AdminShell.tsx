@@ -73,7 +73,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     <div className="min-h-screen bg-zinc-950">
       <Topbar onMenuOpen={() => setSidebarOpen(true)} />
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <main className="ml-0 lg:ml-64 p-4 pt-14 lg:p-6 lg:pt-14 min-h-screen">
+      <main className="ml-0 lg:ml-64 p-4 pt-20 lg:p-6 lg:pt-20 min-h-screen">
         {children}
       </main>
     </div>

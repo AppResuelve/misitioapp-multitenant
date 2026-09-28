@@ -53,7 +53,7 @@ export default function Topbar({ onMenuOpen }) {
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-40 h-14 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between px-4">
+      <header className="fixed top-0 left-0 right-0 z-40 h-16 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between px-4">
         {/* Mobile hamburger */}
         <button
           onClick={onMenuOpen}
