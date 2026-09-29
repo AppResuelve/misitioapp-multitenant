@@ -13,38 +13,42 @@ const UNIT_LABEL = { kg: 'Gr', m: 'Cm', l: 'Ml' }
  * @param {object} product - Producto con .skus[].attributeValues[].attribute
  */
 function applyUnitPricing(product) {
-  if (!product?.skus?.length) return
+  try {
+    if (!product?.skus?.length) return
 
-  let unitAttr = null
-  for (const sku of product.skus) {
-    for (const av of sku.attributeValues || []) {
-      if (av.attribute?.unitType) {
-        unitAttr = av.attribute
-        break
-      }
-    }
-    if (unitAttr) break
-  }
-
-  if (!unitAttr) return
-
-  product.unitType = unitAttr.unitType
-
-  const divisor = UNIT_DIVISOR[unitAttr.unitType]
-  if (!divisor) return
-
-  const basePrice = Number(product.retailPrice) || 0
-
-  for (const sku of product.skus) {
-    for (const av of sku.attributeValues || []) {
-      if (av.attributeId === unitAttr.id) {
-        const value = parseFloat(av.value)
-        if (!isNaN(value) && value > 0 && basePrice > 0) {
-          sku.retailPrice = String((value / divisor) * basePrice)
+    let unitAttr = null
+    for (const sku of product.skus) {
+      for (const av of sku.attributeValues || []) {
+        if (av.attribute?.unitType) {
+          unitAttr = av.attribute
+          break
         }
-        break
+      }
+      if (unitAttr) break
+    }
+
+    if (!unitAttr) return
+
+    product.unitType = unitAttr.unitType
+
+    const divisor = UNIT_DIVISOR[unitAttr.unitType]
+    if (!divisor) return
+
+    const basePrice = Number(product.retailPrice) || 0
+
+    for (const sku of product.skus) {
+      for (const av of sku.attributeValues || []) {
+        if (av.attributeId === unitAttr.id) {
+          const value = parseFloat(av.value)
+          if (!isNaN(value) && value > 0 && basePrice > 0) {
+            sku.retailPrice = String((value / divisor) * basePrice)
+          }
+          break
+        }
       }
     }
+  } catch (err) {
+    console.error('[unitPricing applyUnitPricing] ERROR:', err.message, err.stack, '| product:', product?.id)
   }
 }
 

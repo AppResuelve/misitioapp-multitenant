@@ -51,7 +51,9 @@ const list = async (tenantId, query = {}) => {
   const offset = (page - 1) * limit;
 
   const conditions = ['"Product"."status" = \'active\''];
-  const bindParams = []; // Renombrado a bindParams para mayor claridad
+  const bindParams = [];
+
+  console.log('[PRODUCTS SVC list] IN tenantId:', tenantId, '| query:', JSON.stringify(query))
 
   if (tenantId) {
     conditions.push(`"Product"."tenant_id" = $${bindParams.length + 1}`);
@@ -65,7 +67,6 @@ const list = async (tenantId, query = {}) => {
     bindParams.push(`%${search}%`);
   }
 
-  // Sanitizamos el categoryId para evitar strings 'undefined' o 'null'
   let resolvedCategoryId =
     categoryId && categoryId !== "undefined" && categoryId !== "null"
       ? categoryId
@@ -110,22 +111,23 @@ const list = async (tenantId, query = {}) => {
       return `SELECT "product_id" FROM "product_tags" WHERE "tag_value_id" IN (${placeholders.join(", ")})`;
     });
 
-    // FIX: Solo agregamos la condición si realmente hay intersecciones válidas
     if (intersects.length > 0) {
       conditions.push(`"Product"."id" IN (${intersects.join(" INTERSECT ")})`);
     }
   }
 
   const whereClause = conditions.join(" AND ");
+  console.log('[PRODUCTS SVC list] whereClause:', whereClause, '| bindParams:', bindParams)
 
-  // FIX: Usamos "bind" en lugar de "replacements" para que soporte los $1, $2
   const countResult = await sequelize.query(
     `SELECT COUNT(*) as total FROM "products" AS "Product" WHERE ${whereClause}`,
     { bind: bindParams, type: sequelize.QueryTypes.SELECT },
   );
   const total = parseInt(countResult[0]?.total || "0");
+  console.log('[PRODUCTS SVC list] total count:', total)
 
   if (total === 0) {
+    console.log('[PRODUCTS SVC list] returning empty, total=0')
     return { products: [], total: 0, page: Number(page), totalPages: 0 };
   }
 
@@ -141,6 +143,7 @@ const list = async (tenantId, query = {}) => {
     },
   );
   const ids = idResult.map((r) => r.id);
+  console.log('[PRODUCTS SVC list] ids found:', ids)
 
   if (ids.length === 0) {
     return {
@@ -165,6 +168,8 @@ const list = async (tenantId, query = {}) => {
     order: [["created_at", "DESC"]],
   });
 
+  console.log('[PRODUCTS SVC list] products fetched:', products.length, '| names:', products.map(p => p.name))
+
   products.forEach(applyUnitPricing);
 
   const discounts = await getActiveDiscounts(tenantId);
@@ -180,6 +185,8 @@ const list = async (tenantId, query = {}) => {
 };
 
 const getBySlug = async (tenantId, slug) => {
+  console.log('[PRODUCTS SVC getBySlug] IN tenantId:', tenantId, '| slug:', slug)
+  
   const product = await Product.findOne({
     where: { tenantId, slug, status: 'active' },
     include: [
@@ -188,7 +195,11 @@ const getBySlug = async (tenantId, slug) => {
       { model: TagValue, as: 'tagValues', include: [{ model: Tag, as: 'tag' }] },
     ],
   });
+  
+  console.log('[PRODUCTS SVC getBySlug] product from DB:', product?.id, product?.name, '| description length:', product?.description?.length)
+
   if (!product) {
+    console.log('[PRODUCTS SVC getBySlug] NOT FOUND, throwing 404')
     throw Object.assign(new Error('Producto no encontrado'), { status: 404 });
   }
   applyUnitPricing(product);
@@ -197,7 +208,16 @@ const getBySlug = async (tenantId, slug) => {
   const productDiscounts = discounts.filter((d) => d.type !== "cart_total");
   resolveProductPricing(product, productDiscounts);
 
-  product.description = sanitizeDescription(product.description);
+  console.log('[PRODUCTS SVC getBySlug] running sanitizeDescription on description length:', product.description?.length)
+  try {
+    product.description = sanitizeDescription(product.description);
+    console.log('[PRODUCTS SVC getBySlug] sanitizeDescription OK')
+  } catch (sanitizeErr) {
+    console.error('[PRODUCTS SVC getBySlug] sanitizeDescription ERROR:', sanitizeErr.message, sanitizeErr.stack)
+    product.description = product.description || '';
+  }
+  
+  console.log('[PRODUCTS SVC getBySlug] DONE, returning product')
   return product;
 };
 
