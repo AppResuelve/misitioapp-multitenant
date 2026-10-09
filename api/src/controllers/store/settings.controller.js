@@ -65,11 +65,12 @@ function formatBranchHours(hoursJson) {
 }
 
 const getSettings = async (req, res, next) => {
+  const tenantId = req.tenant.id;
   try {
     const [settings, branches, discounts] = await Promise.all([
-      settingsService.getSettings(req.tenant.id),
+      settingsService.getSettings(tenantId),
       Branch.findAll({
-        where: { tenantId: req.tenant.id, isActive: true },
+        where: { tenantId: tenantId, isActive: true },
         order: [
           ["sortOrder", "ASC"],
           ["name", "ASC"],
