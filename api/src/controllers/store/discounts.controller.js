@@ -1,21 +1,47 @@
-const discountsService = require('../../services/store/discounts.service')
+const discountsService = require("../../services/store/discounts.service");
 
 const getCartDiscounts = async (req, res, next) => {
   try {
-    const discounts = await discountsService.getActiveDiscounts(req.tenant.id)
+    const discounts = await discountsService.getActiveDiscounts(req.tenant.id);
     const cartTotals = discounts
-      .filter((d) => d.type === 'cart_total')
+      .filter((d) => d.type === "cart_total")
       .map((d) => ({
         id: d.id,
         name: d.name,
         percentage: d.percentage,
         minAmount: d.config?.minAmount ?? 0,
         countDiscounted: d.config?.countDiscounted ?? false,
-      }))
-    res.json({ cartTotals })
+      }));
+    res.json({ cartTotals });
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
 
-module.exports = { getCartDiscounts }
+const getStoreDiscounts = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const discounts = await discountsService.getActiveDiscounts(tenantId);
+
+    const cartTotals = discounts
+      .filter((d) => d.type === "cart_total")
+      .map((d) => ({
+        id: d.id,
+        name: d.name,
+        percentage: d.percentage,
+        minAmount: d.config?.minAmount ?? 0,
+        countDiscounted: d.config?.countDiscounted ?? false,
+      }));
+
+    const activePromotions = await discountsService.formatActivePromotions(
+      tenantId,
+      discounts,
+    );
+
+    res.json({ cartTotals, activePromotions });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { getCartDiscounts, getStoreDiscounts };
