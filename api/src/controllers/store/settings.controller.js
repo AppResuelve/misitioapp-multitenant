@@ -65,7 +65,7 @@ function formatBranchHours(hoursJson) {
 
 const getSettings = async (req, res, next) => {
   try {
-    const [settings, branches] = await Promise.all([
+    const [settings, branches, discounts] = await Promise.all([
       settingsService.getSettings(req.tenant.id),
       Branch.findAll({
         where: { tenantId: req.tenant.id, isActive: true },
@@ -74,6 +74,7 @@ const getSettings = async (req, res, next) => {
           ["name", "ASC"],
         ],
       }),
+      discountsService.getActiveDiscounts(tenantId),
     ]);
 
     const formattedBranches = branches.map((b) => ({
@@ -95,7 +96,7 @@ const getSettings = async (req, res, next) => {
     // Armamos la lista para el sistema de Floating Promo Button y Modales
     const activePromotions = await discountsService.formatActivePromotions(
       tenantId,
-      discounts,
+      discounts || [],
     );
 
     res.json({
