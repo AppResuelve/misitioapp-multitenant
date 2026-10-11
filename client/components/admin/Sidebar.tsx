@@ -1,5 +1,5 @@
 // @ts-nocheck
-'use client'
+"use client";
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
@@ -40,7 +40,11 @@ const NAV_CONFIG = [
           { to: "/dashboard/categories", icon: Tags, label: "Categorías" },
           { to: "/dashboard/tags", icon: Tag, label: "Etiquetas" },
           { to: "/dashboard/discounts", icon: Percent, label: "Descuentos" },
-          { to: "/dashboard/attributes", icon: SlidersHorizontal, label: "Atributos" },
+          {
+            to: "/dashboard/attributes",
+            icon: SlidersHorizontal,
+            label: "Atributos",
+          },
         ],
       },
       { to: "/dashboard/media", icon: Image, label: "Galería" },
@@ -48,25 +52,32 @@ const NAV_CONFIG = [
   },
   {
     group: "Sitio público",
-    items: [
-      { to: "/dashboard/store", icon: Store, label: "Tienda" },
-    ],
+    items: [{ to: "/dashboard/store", icon: Store, label: "Tienda" }],
   },
   {
     group: "Desarrollador",
     items: [
-      { to: "/dashboard/change-requests", icon: Wrench, label: "Solicitar cambio" },
+      {
+        to: "/dashboard/change-requests",
+        icon: Wrench,
+        label: "Solicitar cambio",
+      },
     ],
   },
-]
+];
 
 const SETTINGS_ITEMS = [
   { to: "/dashboard/settings/general", label: "General", icon: Globe },
   { to: "/dashboard/settings/contact", label: "Contacto", icon: Settings },
+  {
+    to: "/dashboard/settings/payment",
+    label: "Medios de pago",
+    icon: CreditCard,
+  },
   { to: "/dashboard/settings/billing", label: "Facturación", icon: CreditCard },
   { to: "/dashboard/settings/data", label: "Datos", icon: Database },
   { to: "/dashboard/settings/help", label: "Ayuda", icon: HelpCircle },
-]
+];
 
 export default function Sidebar({ open, onClose, logoUrl }) {
   const pathname = usePathname();
@@ -78,25 +89,27 @@ export default function Sidebar({ open, onClose, logoUrl }) {
 
   const toggleSubmenu = (label: string) => {
     if (settingsOpen) setSettingsOpen(false);
-    setOpenSubmenus(prev =>
-      prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]
-    )
-  }
+    setOpenSubmenus((prev) =>
+      prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label],
+    );
+  };
 
   const handleSettingsToggle = () => {
     if (openSubmenus.length > 0) setOpenSubmenus([]);
-    setSettingsOpen(prev => !prev);
-  }
+    setSettingsOpen((prev) => !prev);
+  };
 
   useEffect(() => {
-    NAV_CONFIG.forEach(group => {
-      group.items.forEach(item => {
-        if (item.children?.some(child => pathname.startsWith(child.to))) {
-          setOpenSubmenus(prev => prev.includes(item.label) ? prev : [...prev, item.label])
+    NAV_CONFIG.forEach((group) => {
+      group.items.forEach((item) => {
+        if (item.children?.some((child) => pathname.startsWith(child.to))) {
+          setOpenSubmenus((prev) =>
+            prev.includes(item.label) ? prev : [...prev, item.label],
+          );
         }
-      })
-    })
-  }, [pathname])
+      });
+    });
+  }, [pathname]);
 
   const sidebarContent = (
     <>
@@ -136,8 +149,10 @@ export default function Sidebar({ open, onClose, logoUrl }) {
             </p>
             {group.items.map((item) => {
               if (item.children) {
-                const isOpen = openSubmenus.includes(item.label)
-                const isActive = item.children.some(c => pathname.startsWith(c.to))
+                const isOpen = openSubmenus.includes(item.label);
+                const isActive = item.children.some((c) =>
+                  pathname.startsWith(c.to),
+                );
                 return (
                   <div key={item.label}>
                     <button
@@ -150,7 +165,11 @@ export default function Sidebar({ open, onClose, logoUrl }) {
                     >
                       <item.icon className="w-4 h-4" />
                       <span className="flex-1 text-left">{item.label}</span>
-                      {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      {isOpen ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4" />
+                      )}
                     </button>
                     {isOpen && (
                       <div className="ml-4">
@@ -159,8 +178,11 @@ export default function Sidebar({ open, onClose, logoUrl }) {
                             key={child.to}
                             href={child.to}
                             onClick={async (e) => {
-                              e.preventDefault()
-                              if (await confirmLeave()) { onClose(); router.push(child.to) }
+                              e.preventDefault();
+                              if (await confirmLeave()) {
+                                onClose();
+                                router.push(child.to);
+                              }
                             }}
                             className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                               pathname.startsWith(child.to)
@@ -175,16 +197,19 @@ export default function Sidebar({ open, onClose, logoUrl }) {
                       </div>
                     )}
                   </div>
-                )
+                );
               }
               return (
                 <Link
                   key={item.to}
                   href={item.to}
                   onClick={async (e) => {
-                    e.preventDefault()
+                    e.preventDefault();
                     if (settingsOpen) setSettingsOpen(false);
-                    if (await confirmLeave()) { onClose(); router.push(item.to) }
+                    if (await confirmLeave()) {
+                      onClose();
+                      router.push(item.to);
+                    }
                   }}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     pathname === item.to
@@ -195,7 +220,7 @@ export default function Sidebar({ open, onClose, logoUrl }) {
                   <item.icon className="w-4 h-4" />
                   {item.label}
                 </Link>
-              )
+              );
             })}
           </div>
         ))}
@@ -213,7 +238,11 @@ export default function Sidebar({ open, onClose, logoUrl }) {
         >
           <Settings className="w-4 h-4" />
           <span className="flex-1 text-left">Configuración</span>
-          {settingsOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          {settingsOpen ? (
+            <ChevronDown className="w-4 h-4" />
+          ) : (
+            <ChevronRight className="w-4 h-4" />
+          )}
         </button>
         {settingsOpen && (
           <div className="mt-1">
@@ -222,8 +251,11 @@ export default function Sidebar({ open, onClose, logoUrl }) {
                 key={item.to}
                 href={item.to}
                 onClick={async (e) => {
-                  e.preventDefault()
-                  if (await confirmLeave()) { onClose(); router.push(item.to) }
+                  e.preventDefault();
+                  if (await confirmLeave()) {
+                    onClose();
+                    router.push(item.to);
+                  }
                 }}
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors mx-3 ${
                   pathname.startsWith(item.to)

@@ -1,34 +1,34 @@
-'use client'
+"use client";
 // @ts-nocheck
-import axios from 'axios'
+import axios from "axios";
 
 const api = axios.create({
-  baseURL: '/api',
-})
+  baseURL: "/api",
+});
 
-let isLoggingOut = false
+let isLoggingOut = false;
 
 export const resetLogoutFlag = () => {
-  isLoggingOut = false
-}
+  isLoggingOut = false;
+};
 
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 && !isLoggingOut) {
-      isLoggingOut = true
-      window.dispatchEvent(new CustomEvent('auth:logout'))
+      isLoggingOut = true;
+      window.dispatchEvent(new CustomEvent("auth:logout"));
     }
-    return Promise.reject(error)
-  }
-)
+    return Promise.reject(error);
+  },
+);
 
-export default api
+export default api;
 
-export async function uploadImage(file: any, folder = 'productos') {
-  const formData = new FormData()
-  formData.append('image', file)
-  formData.append('folder', folder)
-  const { data } = await api.post('/admin/upload', formData)
-  return data
+export async function uploadImage(file: any, folder = "productos") {
+  const formData = new FormData();
+  formData.append("image", file);
+  formData.append("folder", folder);
+  const { data } = await api.post("/admin/upload", formData);
+  return data;
 }

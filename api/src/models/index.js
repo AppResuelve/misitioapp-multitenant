@@ -1,41 +1,77 @@
-const sequelize = require('../config/database')
+const sequelize = require("../config/database");
 
 const models = {
-  Tenant: require('./Tenant')(sequelize, require('sequelize').DataTypes),
-  User: require('./User')(sequelize, require('sequelize').DataTypes),
-  Product: require('./Product')(sequelize, require('sequelize').DataTypes),
-  Category: require('./Category')(sequelize, require('sequelize').DataTypes),
-  Order: require('./Order')(sequelize, require('sequelize').DataTypes),
-  Setting: require('./Setting')(sequelize, require('sequelize').DataTypes),
-  Media: require('./Media')(sequelize, require('sequelize').DataTypes),
-  ChangeRequest: require('./ChangeRequest')(sequelize, require('sequelize').DataTypes),
-  Service: require('./Service')(sequelize, require('sequelize').DataTypes),
-  Attribute: require('./Attribute')(sequelize, require('sequelize').DataTypes),
-  AttributeValue: require('./AttributeValue')(sequelize, require('sequelize').DataTypes),
-  ProductSku: require('./ProductSku')(sequelize, require('sequelize').DataTypes),
-  SkuAttributeValue: require('./SkuAttributeValue')(sequelize, require('sequelize').DataTypes),
-  ServiceVariant: require('./ServiceVariant')(sequelize, require('sequelize').DataTypes),
-  ServiceVariantModifier: require('./ServiceVariantModifier')(sequelize, require('sequelize').DataTypes),
-  Tag: require('./Tag')(sequelize, require('sequelize').DataTypes),
-  TagValue: require('./TagValue')(sequelize, require('sequelize').DataTypes),
-  Discount: require('./Discount')(sequelize, require('sequelize').DataTypes),
-  Branch: require('./Branch')(sequelize, require('sequelize').DataTypes),
-}
+  Tenant: require("./Tenant")(sequelize, require("sequelize").DataTypes),
+  User: require("./User")(sequelize, require("sequelize").DataTypes),
+  Product: require("./Product")(sequelize, require("sequelize").DataTypes),
+  Category: require("./Category")(sequelize, require("sequelize").DataTypes),
+  Order: require("./Order")(sequelize, require("sequelize").DataTypes),
+  Setting: require("./Setting")(sequelize, require("sequelize").DataTypes),
+  Media: require("./Media")(sequelize, require("sequelize").DataTypes),
+  ChangeRequest: require("./ChangeRequest")(
+    sequelize,
+    require("sequelize").DataTypes,
+  ),
+  Service: require("./Service")(sequelize, require("sequelize").DataTypes),
+  Attribute: require("./Attribute")(sequelize, require("sequelize").DataTypes),
+  AttributeValue: require("./AttributeValue")(
+    sequelize,
+    require("sequelize").DataTypes,
+  ),
+  ProductSku: require("./ProductSku")(
+    sequelize,
+    require("sequelize").DataTypes,
+  ),
+  SkuAttributeValue: require("./SkuAttributeValue")(
+    sequelize,
+    require("sequelize").DataTypes,
+  ),
+  ServiceVariant: require("./ServiceVariant")(
+    sequelize,
+    require("sequelize").DataTypes,
+  ),
+  ServiceVariantModifier: require("./ServiceVariantModifier")(
+    sequelize,
+    require("sequelize").DataTypes,
+  ),
+  Tag: require("./Tag")(sequelize, require("sequelize").DataTypes),
+  TagValue: require("./TagValue")(sequelize, require("sequelize").DataTypes),
+  Discount: require("./Discount")(sequelize, require("sequelize").DataTypes),
+  Branch: require("./Branch")(sequelize, require("sequelize").DataTypes),
+  PaymentMethod: require("./PaymentMethod")(
+    sequelize,
+    require("sequelize").DataTypes,
+  ), // 👈 1. Importar
+};
 
 // Modelos que pertenecen a un tenant (todos menos Tenant)
 const TENANTED_MODELS = [
-  'User', 'Category', 'Product', 'Order', 'Setting', 'Media', 'ChangeRequest',
-  'Service', 'Attribute', 'AttributeValue', 'ProductSku',
-  'ServiceVariant', 'ServiceVariantModifier', 'Tag', 'TagValue', 'Discount',
-  'Branch',
-]
+  "User",
+  "Category",
+  "Product",
+  "Order",
+  "Setting",
+  "Media",
+  "ChangeRequest",
+  "Service",
+  "Attribute",
+  "AttributeValue",
+  "ProductSku",
+  "ServiceVariant",
+  "ServiceVariantModifier",
+  "Tag",
+  "TagValue",
+  "Discount",
+  "Branch",
+  "PaymentMethod",
+];
 
 Object.keys(models).forEach((modelName) => {
   if (models[modelName].associate) {
-    models[modelName].associate(models)
+    models[modelName].associate(models);
   }
-})
+});
 
-models.sequelize = sequelize
+models.sequelize = sequelize;
 
-module.exports = models
+module.exports = models;

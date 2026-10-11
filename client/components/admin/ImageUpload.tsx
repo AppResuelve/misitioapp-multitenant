@@ -4,8 +4,8 @@ import { useState, useRef } from "react";
 import { Upload, X } from "lucide-react";
 import { uploadImage } from "@/services/admin-api";
 import { compressImages } from "@/utils/compressImage";
-import { Spinner } from "./ui/Spinner";
-import { useAlert } from "./ui/AlertContext";
+import { Spinner } from "../ui/Spinner";
+import { useAlert } from "../../context/AlertContext";
 
 export default function ImageUpload({
   images = [],
@@ -32,11 +32,17 @@ export default function ImageUpload({
     const allowedMimes = /^image\/(jpeg|jpg|png|webp|gif)$/;
     for (const file of files) {
       if (file.size > 10 * 1024 * 1024) {
-        Alert.fire({ message: `"${file.name}" supera los 10MB`, type: "warning" });
+        Alert.fire({
+          message: `"${file.name}" supera los 10MB`,
+          type: "warning",
+        });
         return;
       }
       if (!allowedMimes.test(file.type)) {
-        Alert.fire({ message: `"${file.name}" no es una imagen válida (jpg, png, webp, gif)`, type: "warning" });
+        Alert.fire({
+          message: `"${file.name}" no es una imagen válida (jpg, png, webp, gif)`,
+          type: "warning",
+        });
         return;
       }
     }
@@ -45,7 +51,7 @@ export default function ImageUpload({
     try {
       const processedFiles = await compressImages(files);
       const results = await Promise.allSettled(
-        processedFiles.map((file) => uploadImage(file, folder))
+        processedFiles.map((file) => uploadImage(file, folder)),
       );
 
       const newImages = [...images];

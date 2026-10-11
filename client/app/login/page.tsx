@@ -1,35 +1,35 @@
 // @ts-nocheck
-'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { Eye, EyeOff, PieChart } from 'lucide-react'
-import { useAuth } from '@/components/admin/context/AuthContext'
-import { Button } from '@/components/admin/ui/Form'
-import { Spinner } from '@/components/admin/ui/Spinner'
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Eye, EyeOff, PieChart } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { Button } from "@/components/ui/Form";
+import { Spinner } from "@/components/ui/Spinner";
 
 export default function Login() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPw, setShowPw] = useState(false)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const { login } = useAuth()
-  const navigate = useRouter()
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const navigate = useRouter();
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
+    e.preventDefault();
+    setError("");
+    setLoading(true);
     try {
-      await login(email, password)
-      navigate.push('/dashboard')
+      await login(email, password);
+      navigate.push("/dashboard");
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al iniciar sesión')
+      setError(err.response?.data?.error || "Error al iniciar sesión");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-950 px-4">
@@ -49,7 +49,9 @@ export default function Login() {
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-1.5">Email</label>
+            <label className="block text-sm font-medium text-zinc-400 mb-1.5">
+              Email
+            </label>
             <input
               type="email"
               value={email}
@@ -60,10 +62,12 @@ export default function Login() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-1.5">Contraseña</label>
+            <label className="block text-sm font-medium text-zinc-400 mb-1.5">
+              Contraseña
+            </label>
             <div className="relative">
               <input
-                type={showPw ? 'text' : 'password'}
+                type={showPw ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -75,21 +79,34 @@ export default function Login() {
                 onClick={() => setShowPw(!showPw)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
               >
-                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showPw ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
               </button>
             </div>
           </div>
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? <><Spinner size="sm" className="mr-2" /> Ingresando...</> : 'Ingresar'}
+            {loading ? (
+              <>
+                <Spinner size="sm" className="mr-2" /> Ingresando...
+              </>
+            ) : (
+              "Ingresar"
+            )}
           </Button>
         </form>
 
         <p className="text-center mt-6">
-          <Link href="/forgot" className="text-sm text-zinc-500 hover:text-cyan-400 transition-colors">
+          <Link
+            href="/forgot"
+            className="text-sm text-zinc-500 hover:text-cyan-400 transition-colors"
+          >
             ¿Olvidaste tu contraseña?
           </Link>
         </p>
       </div>
     </div>
-  )
+  );
 }

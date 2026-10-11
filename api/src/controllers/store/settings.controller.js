@@ -1,6 +1,6 @@
 const settingsService = require("../../services/store/settings.service");
 const discountsService = require("../../services/store/discounts.service");
-const { Branch } = require("../../models");
+const { Branch, PaymentMethod } = require("../../models");
 
 const DAY_NAMES = {
   mon: "Lun",
@@ -67,7 +67,7 @@ function formatBranchHours(hoursJson) {
 const getSettings = async (req, res, next) => {
   const tenantId = req.tenant.id;
   try {
-    const [settings, branches, discounts] = await Promise.all([
+    const [settings, branches, discounts, paymentMethods] = await Promise.all([
       settingsService.getSettings(tenantId),
       Branch.findAll({
         where: { tenantId: tenantId, isActive: true },
@@ -77,6 +77,13 @@ const getSettings = async (req, res, next) => {
         ],
       }),
       discountsService.getActiveDiscounts(tenantId),
+      PaymentMethod.findAll({
+        where: { tenantId: tenantId, isActive: true },
+        order: [
+          ["sortOrder", "ASC"],
+          ["title", "ASC"],
+        ],
+      }),
     ]);
 
     const formattedBranches = branches.map((b) => ({
@@ -101,8 +108,20 @@ const getSettings = async (req, res, next) => {
       discounts || [],
     );
 
+    // Formatear paymentMethods limpios para el frontend
+    const formattedPaymentMethods = paymentMethods.map((pm) => ({
+      id: pm.id,
+      type: pm.type,
+      title: pm.title,
+      badge: pm.badge || null,
+      description: pm.description || null,
+      sortOrder: pm.sortOrder,
+      brands: Array.isArray(pm.brands) ? pm.brands : [],
+    }));
+
     res.json({
       ...settings,
+      paymentMethods: formattedPaymentMethods,
       branches: formattedBranches,
       cartTotals,
       activePromotions,

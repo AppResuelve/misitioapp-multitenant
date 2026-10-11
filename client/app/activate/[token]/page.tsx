@@ -1,70 +1,73 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { Key, Eye, EyeOff, ArrowRight } from 'lucide-react'
-import { Button } from '@/components/admin/ui/Form'
-import { Spinner } from '@/components/admin/ui/Spinner'
-import api from '@/services/admin-api'
-import Link from 'next/link'
+import { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { Key, Eye, EyeOff, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/Form";
+import { Spinner } from "@/components/ui/Spinner";
+import api from "@/services/admin-api";
+import Link from "next/link";
 
 export default function Activate() {
-  const params = useParams()
-  const router = useRouter()
-  const token = params?.token as string
+  const params = useParams();
+  const router = useRouter();
+  const token = params?.token as string;
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [showPw, setShowPw] = useState(false)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [done, setDone] = useState(false)
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
 
   useEffect(() => {
     if (!token) {
-      setError('Token no proporcionado.')
-      setLoading(false)
-      return
+      setError("Token no proporcionado.");
+      setLoading(false);
+      return;
     }
 
-    api.post('/auth/validate-token', { token })
+    api
+      .post("/auth/validate-token", { token })
       .then(({ data }) => setEmail(data.email))
-      .catch((err) => setError(err.response?.data?.error || 'Token inválido o expirado.'))
-      .finally(() => setLoading(false))
-  }, [token])
+      .catch((err) =>
+        setError(err.response?.data?.error || "Token inválido o expirado."),
+      )
+      .finally(() => setLoading(false));
+  }, [token]);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
     if (!password || password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres')
-      return
+      setError("La contraseña debe tener al menos 6 caracteres");
+      return;
     }
     if (password !== confirm) {
-      setError('Las contraseñas no coinciden')
-      return
+      setError("Las contraseñas no coinciden");
+      return;
     }
 
-    setError('')
-    setSubmitting(true)
+    setError("");
+    setSubmitting(true);
     try {
-      await api.post('/auth/activate', { token, password })
-      setDone(true)
-      setTimeout(() => router.push('/login'), 2000)
+      await api.post("/auth/activate", { token, password });
+      setDone(true);
+      setTimeout(() => router.push("/login"), 2000);
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al activar cuenta')
+      setError(err.response?.data?.error || "Error al activar cuenta");
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
-  }
+  };
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-950">
         <Spinner />
       </div>
-    )
+    );
   }
 
   if (done) {
@@ -74,11 +77,13 @@ export default function Activate() {
           <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
             <Key className="w-8 h-8 text-emerald-400" />
           </div>
-          <h1 className="text-xl font-bold text-zinc-100 mb-2">¡Cuenta activada!</h1>
+          <h1 className="text-xl font-bold text-zinc-100 mb-2">
+            ¡Cuenta activada!
+          </h1>
           <p className="text-zinc-400">Redirigiendo al login...</p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -100,7 +105,9 @@ export default function Activate() {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-1.5">Contraseña</label>
+            <label className="block text-sm font-medium text-zinc-400 mb-1.5">
+              Contraseña
+            </label>
             <div className="relative">
               <input
                 type={showPw ? "text" : "password"}
@@ -116,13 +123,19 @@ export default function Activate() {
                 onClick={() => setShowPw(!showPw)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
               >
-                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showPw ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
               </button>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-1.5">Confirmar contraseña</label>
+            <label className="block text-sm font-medium text-zinc-400 mb-1.5">
+              Confirmar contraseña
+            </label>
             <input
               type="password"
               value={confirm}
@@ -134,11 +147,14 @@ export default function Activate() {
           </div>
 
           <Button type="submit" className="w-full" disabled={submitting}>
-            {submitting ? 'Activando...' : 'Activar cuenta'}
+            {submitting ? "Activando..." : "Activar cuenta"}
           </Button>
 
           <div className="mt-4 text-center">
-            <Link href="/login" className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-300 transition-colors">
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
               ¿Ya te activaste? Ir al login
               <ArrowRight className="w-4 h-4" />
             </Link>
@@ -146,5 +162,5 @@ export default function Activate() {
         </form>
       </div>
     </div>
-  )
+  );
 }

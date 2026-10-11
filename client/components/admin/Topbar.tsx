@@ -1,10 +1,10 @@
 // @ts-nocheck
-'use client'
+"use client";
 import { useState } from "react";
 import { Menu, MoreHorizontal, LogOut, Key, Eye, EyeOff } from "lucide-react";
-import { useAuth } from "@/components/admin/context/AuthContext";
-import { useAlert } from "@/components/admin/ui/AlertContext";
-import { Modal } from "@/components/admin/ui/Modal";
+import { useAuth } from "@/context/AuthContext";
+import { useAlert } from "@/context/AlertContext";
+import { Modal } from "@/components/ui/Modal";
 import api from "@/services/admin-api";
 
 export default function Topbar({ onMenuOpen }) {
@@ -76,7 +76,9 @@ export default function Topbar({ onMenuOpen }) {
             <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs font-medium text-zinc-300">
               {user?.name?.[0]?.toUpperCase() || "A"}
             </div>
-            <span className="hidden sm:block text-sm text-zinc-300">{user?.name}</span>
+            <span className="hidden sm:block text-sm text-zinc-300">
+              {user?.name}
+            </span>
           </button>
 
           {menuOpen && (
@@ -87,8 +89,12 @@ export default function Topbar({ onMenuOpen }) {
               />
               <div className="absolute right-0 top-full mt-2 w-52 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-20 p-1">
                 <div className="px-3 py-2 border-b border-zinc-700 mb-1">
-                  <p className="text-sm font-medium text-zinc-200 truncate">{user?.name}</p>
-                  <p className="text-xs text-zinc-500 truncate">{user?.email}</p>
+                  <p className="text-sm font-medium text-zinc-200 truncate">
+                    {user?.name}
+                  </p>
+                  <p className="text-xs text-zinc-500 truncate">
+                    {user?.email}
+                  </p>
                 </div>
                 <button
                   onClick={() => {
@@ -149,7 +155,11 @@ export default function Topbar({ onMenuOpen }) {
                 onClick={() => setShowPw(!showPw)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
               >
-                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showPw ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
               </button>
             </div>
           </div>

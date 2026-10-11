@@ -1,154 +1,185 @@
 // @ts-nocheck
-'use client'
-import { useState, useEffect, useRef } from 'react'
-import { Plus, Edit, Trash2, GripVertical } from 'lucide-react'
-import { Button, Input } from '@/components/admin/ui/Form'
-import { Modal } from '@/components/admin/ui/Modal'
-import { Spinner } from '@/components/admin/ui/Spinner'
-import { useAlert } from '@/components/admin/ui/AlertContext'
-import ScheduleInput from '@/components/admin/ScheduleInput'
-import api from '@/services/admin-api'
+"use client";
+
+import { useState } from "react";
+import { Plus, Edit, Trash2, GripVertical, MapPin } from "lucide-react";
+import { Button, Input } from "@/components/ui/Form";
+import { Modal } from "@/components/ui/Modal";
+import { Spinner } from "@/components/ui/Spinner";
+import { useAlert } from "@/context/AlertContext";
+import ScheduleInput from "@/components/admin/ScheduleInput";
+import { useBranches } from "@/hooks/admin-useBranches";
+import { COUNTRIES } from "@/data/geoLocationsdata";
 
 export default function ContactSettings() {
-  const Alert = useAlert()
-  const [branches, setBranches] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [editing, setEditing] = useState(null)
-  const [saving, setSaving] = useState(false)
-  const [ordered, setOrdered] = useState([])
-  const [toggling, setToggling] = useState(null)
-  const dragItem = useRef(null)
-  const dragOverItem = useRef(null)
+  const Alert = useAlert();
+  const {
+    ordered,
+    setOrdered,
+    loading,
+    createBranch,
+    updateBranch,
+    deleteBranch,
+    toggleBranchStatus,
+    reorderBranches,
+  } = useBranches();
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [toggling, setToggling] = useState(null);
+
+  // Estados para drag & drop sin acceder a refs en render
+  const [draggingIndex, setDraggingIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
 
   // Form state
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [address, setAddress] = useState('')
-  const [hours, setHours] = useState([])
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [country, setCountry] = useState("AR"); // Default Argentina
+  const [hours, setHours] = useState([]);
 
-  useEffect(() => {
-    fetchBranches()
-  }, [])
-
-  const fetchBranches = async () => {
-    try {
-      const { data } = await api.get('/admin/branches')
-      setBranches(data)
-      setOrdered(data)
-    } catch {
-      // silent fail
-    } finally {
-      setLoading(false)
-    }
-  }
-
+  // Drag and drop handlers
   const handleDragStart = (index) => {
-    dragItem.current = index
-  }
+    setDraggingIndex(index);
+  };
 
   const handleDragEnter = (index) => {
-    dragOverItem.current = index
-  }
+    setDragOverIndex(index);
+  };
 
   const handleDragEnd = async () => {
-    const from = dragItem.current
-    const to = dragOverItem.current
-    if (from === null || to === null || from === to) return
-
-    const reordered = [...ordered]
-    const [moved] = reordered.splice(from, 1)
-    reordered.splice(to, 0, moved)
-    setOrdered(reordered)
-
-    dragItem.current = null
-    dragOverItem.current = null
-
-    try {
-      await api.put('/admin/branches/reorder', {
-        orderedIds: reordered.map((b) => b.id),
-      })
-    } catch {
-      Alert.fire({ message: 'Error al reordenar', type: 'error' })
-      fetchBranches()
+    if (
+      draggingIndex === null ||
+      dragOverIndex === null ||
+      draggingIndex === dragOverIndex
+    ) {
+      setDraggingIndex(null);
+      setDragOverIndex(null);
+      return;
     }
-  }
 
-  const handleToggle = async (id, currentStatus) => {
-    setToggling(id)
+    const reordered = [...ordered];
+    const [moved] = reordered.splice(draggingIndex, 1);
+    reordered.splice(dragOverIndex, 0, moved);
+
+    setDraggingIndex(null);
+    setDragOverIndex(null);
+
     try {
-      await api.patch(`/admin/branches/${id}/toggle-status`)
-      await fetchBranches()
+      await reorderBranches(reordered);
     } catch {
-      Alert.fire({ message: 'Error al cambiar estado', type: 'error' })
+      Alert.fire({ message: "Error al reordenar", type: "error" });
+    }
+  };
+
+  const handleToggle = async (id) => {
+    setToggling(id);
+    try {
+      await toggleBranchStatus(id);
+    } catch {
+      Alert.fire({ message: "Error al cambiar estado", type: "error" });
     } finally {
-      setToggling(null)
+      setToggling(null);
     }
-  }
+  };
 
   const openCreate = () => {
-    setEditing(null)
-    setName('')
-    setPhone('')
-    setAddress('')
-    setHours([])
-    setModalOpen(true)
-  }
+    setEditing(null);
+    setName("");
+    setPhone("");
+    setAddress("");
+    setCity("");
+    setState("");
+    setCountry("AR");
+    setHours([]);
+    setModalOpen(true);
+  };
 
   const openEdit = (branch) => {
-    setEditing(branch)
-    setName(branch.name)
-    setPhone(branch.phone)
-    setAddress(branch.address || '')
-    setHours(branch.hours ? JSON.parse(branch.hours) : [])
-    setModalOpen(true)
-  }
+    setEditing(branch);
+    setName(branch.name || "");
+    setPhone(branch.phone || "");
+    setAddress(branch.address || "");
+    setCity(branch.city || "");
+    setState(branch.state || "");
+    setCountry(branch.country || "AR");
+    setHours(
+      branch.hours
+        ? typeof branch.hours === "string"
+          ? JSON.parse(branch.hours)
+          : branch.hours
+        : [],
+    );
+    setModalOpen(true);
+  };
 
   const closeModal = () => {
-    setModalOpen(false)
-    setEditing(null)
-  }
+    setModalOpen(false);
+    setEditing(null);
+  };
+
+  const handleCountryChange = (newCountryCode) => {
+    setCountry(newCountryCode);
+    setState(""); // Resetear provincia al cambiar de país para evitar inconsistencias
+  };
 
   const handleSave = async (e) => {
-    e.preventDefault()
-    setSaving(true)
+    e.preventDefault();
+    setSaving(true);
     try {
       const payload = {
         name,
         phone,
         address: address || null,
+        city: city || null,
+        state: state || null,
+        country: country || null,
         hours: JSON.stringify(hours),
-      }
+      };
+
       if (editing) {
-        await api.put(`/admin/branches/${editing.id}`, payload)
+        await updateBranch(editing.id, payload);
       } else {
-        await api.post('/admin/branches', payload)
+        await createBranch(payload);
       }
-      await fetchBranches()
-      closeModal()
-    } catch {
-      Alert.fire({ message: 'Error al guardar', type: 'error' })
+
+      closeModal();
+    } catch (err: any) {
+      Alert.fire({
+        message:
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          "Error al guardar",
+        type: "error",
+      });
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   const handleDelete = async (branch) => {
-    if (!confirm(`¿Eliminar "${branch.name}"?`)) return
+    if (!confirm(`¿Eliminar "${branch.name}"?`)) return;
     try {
-      await api.delete(`/admin/branches/${branch.id}`)
-      await fetchBranches()
+      await deleteBranch(branch.id);
     } catch {
-      Alert.fire({ message: 'Error al eliminar', type: 'error' })
+      Alert.fire({ message: "Error al eliminar", type: "error" });
     }
-  }
+  };
+
+  // Obtener provincias del país seleccionado
+  const selectedCountryData =
+    COUNTRIES.find((c) => c.code === country) || COUNTRIES[0];
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-32">
         <Spinner />
       </div>
-    )
+    );
   }
 
   return (
@@ -161,15 +192,14 @@ export default function ContactSettings() {
         </Button>
       </div>
 
-      {branches.length === 0 ? (
+      {ordered.length === 0 ? (
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-12 flex flex-col items-center justify-center text-center">
           <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center mb-4">
-            <svg className="w-6 h-6 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
+            <MapPin className="w-6 h-6 text-zinc-500" />
           </div>
-          <h2 className="text-lg font-semibold text-zinc-100 mb-2">No hay sucursales cargadas</h2>
+          <h2 className="text-lg font-semibold text-zinc-100 mb-2">
+            No hay sucursales cargadas
+          </h2>
           <p className="text-sm text-zinc-400 mb-4">
             Hacé clic en &quot;Agregar sucursal&quot; para crear la primera.
           </p>
@@ -180,77 +210,123 @@ export default function ContactSettings() {
             <thead>
               <tr className="border-b border-zinc-800">
                 <th className="w-12"></th>
-                <th className="text-left text-xs font-semibold text-zinc-500 uppercase tracking-wider px-6 py-3">Nombre</th>
-                <th className="text-left text-xs font-semibold text-zinc-500 uppercase tracking-wider px-6 py-3">Teléfono</th>
-                <th className="text-left text-xs font-semibold text-zinc-500 uppercase tracking-wider px-6 py-3">Estado</th>
-                <th className="text-right text-xs font-semibold text-zinc-500 uppercase tracking-wider px-6 py-3">Acciones</th>
+                <th className="text-left text-xs font-semibold text-zinc-500 uppercase tracking-wider px-6 py-3">
+                  Nombre
+                </th>
+                <th className="text-left text-xs font-semibold text-zinc-500 uppercase tracking-wider px-6 py-3">
+                  Ubicación
+                </th>
+                <th className="text-left text-xs font-semibold text-zinc-500 uppercase tracking-wider px-6 py-3">
+                  Teléfono
+                </th>
+                <th className="text-left text-xs font-semibold text-zinc-500 uppercase tracking-wider px-6 py-3">
+                  Estado
+                </th>
+                <th className="text-right text-xs font-semibold text-zinc-500 uppercase tracking-wider px-6 py-3">
+                  Acciones
+                </th>
               </tr>
             </thead>
             <tbody>
-              {ordered.map((branch, index) => (
-                <tr
-                  key={branch.id}
-                  draggable
-                  onDragStart={() => handleDragStart(index)}
-                  onDragEnter={() => handleDragEnter(index)}
-                  onDragEnd={handleDragEnd}
-                  onDragOver={(e) => e.preventDefault()}
-                  className={`border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50 transition-opacity ${
-                    dragItem.current === index ? 'opacity-50' : ''
-                  }`}
-                >
-                  <td className="pl-4 pr-2 py-4 cursor-grab">
-                    <GripVertical className="w-4 h-4 text-zinc-600 hover:text-zinc-400 transition-colors" />
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="text-sm font-medium text-zinc-100">{branch.name}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="text-sm text-zinc-400">{branch.phone}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <button
-                      onClick={() => handleToggle(branch.id, branch.isActive)}
-                      disabled={toggling === branch.id}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                        branch.isActive
-                          ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
-                          : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
-                      } ${toggling === branch.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${branch.isActive ? 'bg-emerald-400' : 'bg-zinc-500'}`} />
-                      {branch.isActive ? 'Activa' : 'Inactiva'}
-                    </button>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => openEdit(branch)}
-                        className="p-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
-                        title="Editar"
+              {ordered.map((branch, index) => {
+                const countryObj = COUNTRIES.find(
+                  (c) => c.code === branch.country,
+                );
+                const countryName = countryObj
+                  ? countryObj.name
+                  : branch.country;
+
+                const locationParts = [
+                  branch.address,
+                  branch.city,
+                  branch.state,
+                  countryName,
+                ].filter(Boolean);
+
+                const locationText = locationParts.join(", ") || "-";
+
+                return (
+                  <tr
+                    key={branch.id}
+                    draggable
+                    onDragStart={() => handleDragStart(index)}
+                    onDragEnter={() => handleDragEnter(index)}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={(e) => e.preventDefault()}
+                    className={`border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50 transition-opacity ${
+                      draggingIndex === index ? "opacity-50" : ""
+                    }`}
+                  >
+                    <td className="pl-4 pr-2 py-4 cursor-grab">
+                      <GripVertical className="w-4 h-4 text-zinc-600 hover:text-zinc-400 transition-colors" />
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm font-medium text-zinc-100">
+                        {branch.name}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className="text-sm text-zinc-400 truncate max-w-xs block"
+                        title={locationText}
                       >
-                        <Edit className="w-4 h-4" />
-                      </button>
+                        {locationText}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm text-zinc-400">
+                        {branch.phone}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
                       <button
-                        onClick={() => handleDelete(branch)}
-                        className="p-2 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-zinc-700 transition-colors"
-                        title="Eliminar"
+                        onClick={() => handleToggle(branch.id)}
+                        disabled={toggling === branch.id}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                          branch.isActive
+                            ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                            : "bg-zinc-700 text-zinc-400 hover:bg-zinc-600"
+                        } ${toggling === branch.id ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            branch.isActive ? "bg-emerald-400" : "bg-zinc-500"
+                          }`}
+                        />
+                        {branch.isActive ? "Activa" : "Inactiva"}
                       </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => openEdit(branch)}
+                          className="p-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors cursor-pointer"
+                          title="Editar"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(branch)}
+                          className="p-2 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-zinc-700 transition-colors cursor-pointer"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
+      {/* Modal */}
       <Modal
         open={modalOpen}
         onClose={closeModal}
-        title={editing ? 'Editar sucursal' : 'Agregar sucursal'}
+        title={editing ? "Editar sucursal" : "Agregar sucursal"}
         size="md"
       >
         <form onSubmit={handleSave} className="space-y-4">
@@ -274,20 +350,65 @@ export default function ContactSettings() {
             onChange={(e) => setAddress(e.target.value)}
             placeholder="Av. Paraguay 78"
           />
-          <ScheduleInput
-            value={hours}
-            onChange={(val) => setHours(val)}
+
+          {/* País y Provincia */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
+                País
+              </label>
+              <select
+                value={country}
+                onChange={(e) => handleCountryChange(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl bg-zinc-800/80 border border-zinc-700 text-zinc-100 text-sm focus:outline-none focus:border-cyan-500"
+              >
+                {COUNTRIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
+                {selectedCountryData.subdivisionLabel}
+              </label>
+              <select
+                value={state}
+                onChange={(e) => setState(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl bg-zinc-800/80 border border-zinc-700 text-zinc-100 text-sm focus:outline-none focus:border-cyan-500"
+              >
+                <option value="">Seleccionar...</option>
+                {selectedCountryData.states.map((st) => (
+                  <option key={st} value={st}>
+                    {st}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Ciudad */}
+          <Input
+            label="Ciudad / Localidad"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            placeholder="Resistencia"
           />
+
+          <ScheduleInput value={hours} onChange={(val) => setHours(val)} />
+
           <div className="flex gap-3 justify-end pt-2">
             <Button type="button" variant="secondary" onClick={closeModal}>
               Cancelar
             </Button>
             <Button type="submit" disabled={saving}>
-              {saving ? 'Guardando...' : 'Guardar'}
+              {saving ? "Guardando..." : "Guardar"}
             </Button>
           </div>
         </form>
       </Modal>
     </div>
-  )
+  );
 }
