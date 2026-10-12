@@ -9,7 +9,7 @@ import { Table } from "@/components/ui/Table";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAlert } from "@/context/AlertContext";
 import api from "@/services/admin-api";
-import { formatPrice } from "@/components/admin/lib/utils";
+import { formatPrice } from "@/utils/formatData";
 
 export default function Services() {
   const router = useRouter();
