@@ -15,7 +15,7 @@ import ImageUpload from "@/components/admin/ImageUpload";
 
 export default function Categories() {
   const { categories, loading, refetch } = useCategories();
-  const { setIsDirty, confirmLeave } = useUnsavedChanges();
+  const { confirmLeave } = useUnsavedChanges();
   const Alert = useAlert();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -76,7 +76,7 @@ export default function Categories() {
     setSlug("");
     setImage(null);
     setSlugManual(false);
-    setIsDirty(false);
+
     setModalOpen(true);
   };
 
@@ -86,7 +86,7 @@ export default function Categories() {
     setSlug(cat.slug || "");
     setImage(cat.image || null);
     setSlugManual(true);
-    setIsDirty(false);
+
     setModalOpen(true);
   };
 
@@ -95,13 +95,12 @@ export default function Categories() {
       setModalOpen(false);
       setEditing(null);
       setImage(null);
-      setIsDirty(false);
     }
   };
 
   const handleNameChange = (value) => {
     setName(value);
-    setIsDirty(true);
+
     if (!slugManual) {
       setSlug(slugify(value));
     }
@@ -110,12 +109,10 @@ export default function Categories() {
   const handleSlugChange = (value) => {
     setSlug(value);
     setSlugManual(true);
-    setIsDirty(true);
   };
 
   const handleImageChange = (imgs) => {
     setImage(imgs[0] || null);
-    setIsDirty(true);
   };
 
   const handleSave = async (e) => {
@@ -145,7 +142,7 @@ export default function Categories() {
       }
 
       setModalOpen(false);
-      setIsDirty(false);
+
       Alert.fire({
         message: editing
           ? CATEGORY_MESSAGES.UPDATE_SUCCESS

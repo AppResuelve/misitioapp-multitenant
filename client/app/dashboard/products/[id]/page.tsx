@@ -41,7 +41,7 @@ export default function ProductForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const Alert = useAlert();
-  const { setIsDirty, confirmLeave } = useUnsavedChanges();
+  const { confirmLeave } = useUnsavedChanges();
 
   const backParams = new URLSearchParams();
   const pageVal = searchParams?.get("page");
@@ -152,7 +152,6 @@ export default function ProductForm() {
       next.comparePrice = calculateComparePrice(retail, pct);
     }
     setForm(next);
-    setIsDirty(true);
   };
 
   const openAttrModal = () => {
@@ -181,7 +180,6 @@ export default function ProductForm() {
     }
 
     if (Object.keys(modalAttrs).length === 0) {
-      setIsDirty(true);
       setSelectedAttributes({});
       setSkus([]);
       setAttrModalOpen(false);
@@ -230,7 +228,6 @@ export default function ProductForm() {
     setSelectedAttributes(confirmed);
     setSkus(nextSkus);
     setAttrModalOpen(false);
-    setIsDirty(true);
   };
 
   const handleApplyInitialPriceDefaults = () => {
@@ -247,7 +244,6 @@ export default function ProductForm() {
     });
     setSkus(nextSkus);
     setShowPriceModal(false);
-    setIsDirty(true);
   };
 
   const hasUnsyncedChanges = checkUnsyncedAttributes(selectedAttributes, skus);
@@ -256,12 +252,10 @@ export default function ProductForm() {
     const nx = [...skus];
     nx[i] = updatedSku;
     setSkus(nx);
-    setIsDirty(true);
   };
 
   const removeSku = (i: number) => {
     setSkus(skus.filter((_, idx) => idx !== i));
-    setIsDirty(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -326,7 +320,6 @@ export default function ProductForm() {
         duration: 1500,
       });
 
-      setIsDirty(false);
       router.push(backToList);
     } catch (err: any) {
       Alert.fire({

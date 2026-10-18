@@ -6,6 +6,7 @@ import {
   useState,
   useEffect,
   useCallback,
+  useRef,
 } from "react";
 import { useAlert } from "@/context/AlertContext";
 
@@ -22,10 +23,20 @@ export function UnsavedChangesProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [isDirty, setIsDirty] = useState(false);
+  const [isDirty, setIsDirtyState] = useState(false);
+  const isDirtyRef = useRef(false);
   const Alert = useAlert();
 
-  // beforeunload
+  // Setter blindado contra re-renders innecesarios
+  const setIsDirty = useCallback((dirty: boolean) => {
+    const nextVal = Boolean(dirty);
+    if (isDirtyRef.current !== nextVal) {
+      isDirtyRef.current = nextVal;
+      setIsDirtyState(nextVal);
+    }
+  }, []);
+
+  // Evento beforeunload nativo del navegador
   useEffect(() => {
     if (!isDirty) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -37,7 +48,8 @@ export function UnsavedChangesProvider({
   }, [isDirty]);
 
   const confirmLeave = useCallback(async () => {
-    if (!isDirty) return true;
+    if (!isDirtyRef.current) return true;
+
     const result = await Alert.fire({
       title: "¿Salir sin guardar?",
       message: "Tenés cambios sin guardar. Si salís, los cambios se perderán.",
@@ -47,9 +59,12 @@ export function UnsavedChangesProvider({
       confirmButtonText: "Salir",
       cancelButtonText: "Cancelar",
     });
-    if (result.isConfirmed) setIsDirty(false);
+
+    if (result.isConfirmed) {
+      setIsDirty(false);
+    }
     return result.isConfirmed;
-  }, [isDirty, Alert]);
+  }, [Alert, setIsDirty]);
 
   return (
     <Ctx.Provider value={{ isDirty, setIsDirty, confirmLeave }}>

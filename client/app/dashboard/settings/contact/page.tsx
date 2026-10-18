@@ -14,7 +14,7 @@ import { safeParseHours, formatLocationText } from "@/utils/branches";
 
 export default function ContactSettings() {
   const Alert = useAlert();
-  const { setIsDirty, confirmLeave } = useUnsavedChanges();
+  const { isDirty, confirmLeave } = useUnsavedChanges();
   const {
     ordered,
     loading,
@@ -96,7 +96,7 @@ export default function ContactSettings() {
     setState("");
     setCountry(DEFAULT_COUNTRY_CODE);
     setHours([]);
-    setIsDirty(false);
+
     setModalOpen(true);
   };
 
@@ -109,7 +109,7 @@ export default function ContactSettings() {
     setState(branch.state || "");
     setCountry(branch.country || DEFAULT_COUNTRY_CODE);
     setHours(safeParseHours(branch.hours));
-    setIsDirty(false);
+
     setModalOpen(true);
   };
 
@@ -117,14 +117,12 @@ export default function ContactSettings() {
     if (await confirmLeave()) {
       setModalOpen(false);
       setEditing(null);
-      setIsDirty(false);
     }
   };
 
   const handleCountryChange = (newCountryCode: string) => {
     setCountry(newCountryCode);
     setState("");
-    setIsDirty(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -155,7 +153,6 @@ export default function ContactSettings() {
         duration: 1500,
       });
 
-      setIsDirty(false);
       setModalOpen(false);
       setEditing(null);
     } catch (err: any) {
@@ -381,7 +378,6 @@ export default function ContactSettings() {
             value={name}
             onChange={(e) => {
               setName(e.target.value);
-              setIsDirty(true);
             }}
             placeholder="Sucursal Centro"
             required
@@ -393,7 +389,6 @@ export default function ContactSettings() {
             value={phone}
             onChange={(e) => {
               setPhone(e.target.value);
-              setIsDirty(true);
             }}
             placeholder="5493624123456"
             required
@@ -404,7 +399,6 @@ export default function ContactSettings() {
             value={address}
             onChange={(e) => {
               setAddress(e.target.value);
-              setIsDirty(true);
             }}
             placeholder="Av. Paraguay 78"
           />
@@ -423,7 +417,6 @@ export default function ContactSettings() {
               value={state}
               onChange={(e) => {
                 setState(e.target.value);
-                setIsDirty(true);
               }}
               options={stateOptions}
             />
@@ -434,7 +427,6 @@ export default function ContactSettings() {
             value={city}
             onChange={(e) => {
               setCity(e.target.value);
-              setIsDirty(true);
             }}
             placeholder="Resistencia"
           />
@@ -444,7 +436,6 @@ export default function ContactSettings() {
               value={hours}
               onChange={(val) => {
                 setHours(val);
-                setIsDirty(true);
               }}
             />
           </div>

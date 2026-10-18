@@ -17,7 +17,7 @@ import {
 export default function TagsPage() {
   const { tags, loading, refetch } = useTags();
   const Alert = useAlert();
-  const { setIsDirty, confirmLeave } = useUnsavedChanges();
+  const { confirmLeave } = useUnsavedChanges();
 
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -32,7 +32,6 @@ export default function TagsPage() {
     setEditingId("new");
     setForm({ name: "", color: DEFAULT_TAG_COLOR, values: [] });
     setOriginalForm(null);
-    setIsDirty(false);
   };
 
   const openEdit = (tag) => {
@@ -48,14 +47,12 @@ export default function TagsPage() {
     setEditingId(tag.id);
     setForm(snapshot);
     setOriginalForm(snapshot);
-    setIsDirty(false);
   };
 
   const closeForm = async () => {
     if (await confirmLeave()) {
       setEditingId(null);
       setOriginalForm(null);
-      setIsDirty(false);
     }
   };
 
@@ -64,19 +61,16 @@ export default function TagsPage() {
       ...form,
       values: [...form.values, { value: "", sortOrder: form.values.length }],
     });
-    setIsDirty(true);
   };
 
   const removeValue = (i) => {
     setForm({ ...form, values: form.values.filter((_, idx) => idx !== i) });
-    setIsDirty(true);
   };
 
   const handleValueChange = (i, value) => {
     const vals = [...form.values];
     vals[i] = { ...vals[i], value };
     setForm({ ...form, values: vals });
-    setIsDirty(true);
   };
 
   const buildConflictMessage = (body) => {
@@ -138,7 +132,6 @@ export default function TagsPage() {
               await api.put(`/admin/tags/${editingId}?force=true`, payload);
             } else {
               if (originalForm) setForm(originalForm);
-              setIsDirty(false);
               setSaving(false);
               return;
             }
@@ -156,7 +149,6 @@ export default function TagsPage() {
         type: "success",
         duration: 1500,
       });
-      setIsDirty(false);
       setEditingId(null);
       setOriginalForm(null);
       refetch();
@@ -314,7 +306,6 @@ export default function TagsPage() {
             value={form.name}
             onChange={(e) => {
               setForm({ ...form, name: e.target.value });
-              setIsDirty(true);
             }}
             placeholder="Ocasión, Tamaño, Colección..."
             required
@@ -331,7 +322,6 @@ export default function TagsPage() {
                 value={form.color}
                 onChange={(e) => {
                   setForm({ ...form, color: e.target.value });
-                  setIsDirty(true);
                 }}
                 className="w-10 h-10 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-base)] cursor-pointer p-0.5"
               />
@@ -342,7 +332,6 @@ export default function TagsPage() {
                     type="button"
                     onClick={() => {
                       setForm({ ...form, color: c });
-                      setIsDirty(true);
                     }}
                     className={`w-6 h-6 rounded-full cursor-pointer transition-transform ${
                       form.color === c

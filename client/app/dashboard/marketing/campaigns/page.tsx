@@ -40,7 +40,7 @@ export default function CampaignsPage() {
     toggleCampaignStatus,
   } = useCampaigns();
 
-  const { setIsDirty, confirmLeave } = useUnsavedChanges();
+  const { confirmLeave } = useUnsavedChanges();
   const Alert = useAlert();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -65,7 +65,6 @@ export default function CampaignsPage() {
     setColor(COLOR_PALETTE[0] || "#6366f1");
     setSlugManual(false);
     setEditing(null);
-    setIsDirty(false);
   };
 
   const openCreate = () => {
@@ -86,7 +85,7 @@ export default function CampaignsPage() {
     setEndsAt(formatDateInput(campaign.endsAt));
     setColor(campaign.color || COLOR_PALETTE[0] || "#6366f1");
     setSlugManual(true);
-    setIsDirty(false);
+
     setModalOpen(true);
   };
 
@@ -99,7 +98,6 @@ export default function CampaignsPage() {
 
   const handleNameChange = (val: string) => {
     setName(val);
-    setIsDirty(true);
     if (!slugManual) {
       setSlug(slugify(val));
     }
@@ -108,7 +106,6 @@ export default function CampaignsPage() {
   const handleSlugChange = (val: string) => {
     setSlug(val);
     setSlugManual(true);
-    setIsDirty(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -401,7 +398,6 @@ export default function CampaignsPage() {
               value={description}
               onChange={(e) => {
                 setDescription(e.target.value);
-                setIsDirty(true);
               }}
               rows={2}
               placeholder="Notas para el equipo o detalles de la estrategia..."
@@ -419,7 +415,6 @@ export default function CampaignsPage() {
                 value={startsAt}
                 onChange={(e) => {
                   setStartsAt(e.target.value);
-                  setIsDirty(true);
                 }}
                 required
                 className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
@@ -434,7 +429,6 @@ export default function CampaignsPage() {
                 value={endsAt}
                 onChange={(e) => {
                   setEndsAt(e.target.value);
-                  setIsDirty(true);
                 }}
                 required
                 className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
@@ -453,7 +447,6 @@ export default function CampaignsPage() {
                   type="button"
                   onClick={() => {
                     setColor(c);
-                    setIsDirty(true);
                   }}
                   className={`w-7 h-7 rounded-full cursor-pointer transition-transform ${
                     color === c

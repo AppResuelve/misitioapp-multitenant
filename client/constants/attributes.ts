@@ -16,6 +16,8 @@ export const ATTRIBUTE_MESSAGES = {
   SAVE_SUCCESS_NEW: "Atributo creado",
   SAVE_SUCCESS_EDIT: "Atributo actualizado",
   SAVE_ERROR: "Error al guardar atributo",
+  EMPTY_VALUES_NOT_ALLOWED:
+    "Todos los valores agregados deben tener contenido (no pueden quedar vacíos)",
   DELETE_CONFIRM_TITLE: "¿Eliminar atributo?",
   DELETE_SUCCESS: "Atributo eliminado",
   DELETE_ERROR: "Error al eliminar atributo",

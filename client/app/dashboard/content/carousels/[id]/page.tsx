@@ -18,8 +18,9 @@ import { useCampaigns } from "@/hooks/admin-useCampaigns";
 import { useCategories } from "@/hooks/admin-useCategories";
 import { useSiteContent } from "@/hooks/admin-useSiteContent";
 import { siteContentService } from "@/services/siteContent.service";
-import { Button, Input, Spinner } from "@/components/ui";
+import { Button, DropdownSelect, Input, Spinner } from "@/components/ui";
 import ImageUpload from "@/components/admin/ImageUpload";
+import ResourceSearchTrigger from "@/components/admin/search/ResourceSearchTrigger";
 import {
   CAROUSEL_SLOTS,
   LINK_TYPES,
@@ -65,7 +66,7 @@ export default function CarouselFormPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const Alert = useAlert();
-  const { setIsDirty, confirmLeave } = useUnsavedChanges();
+  const { confirmLeave } = useUnsavedChanges();
 
   const isEditing = Boolean(id) && id !== "new";
 
@@ -130,14 +131,12 @@ export default function CarouselFormPage() {
   const handleBack = async (e: React.MouseEvent) => {
     e.preventDefault();
     if (await confirmLeave()) {
-      setIsDirty(false);
       router.push("/dashboard/content/carousels");
     }
   };
 
   const handleFieldChange = (field: string, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }));
-    setIsDirty(true);
   };
 
   const handleConfigChange = (key: string, value: any) => {
@@ -148,7 +147,6 @@ export default function CarouselFormPage() {
         [key]: value,
       },
     }));
-    setIsDirty(true);
   };
 
   // Manejo de Diapositivas con tope de 6
@@ -167,7 +165,6 @@ export default function CarouselFormPage() {
         slides: [...prev.config.slides, createEmptySlide()],
       },
     }));
-    setIsDirty(true);
   };
 
   const removeSlide = (index: number) => {
@@ -185,7 +182,6 @@ export default function CarouselFormPage() {
         slides: prev.config.slides.filter((_, i) => i !== index),
       },
     }));
-    setIsDirty(true);
   };
 
   const moveSlide = (index: number, direction: "up" | "down") => {
@@ -204,7 +200,6 @@ export default function CarouselFormPage() {
         slides: newSlides,
       },
     }));
-    setIsDirty(true);
   };
 
   const updateSlideField = (index: number, field: string, value: any) => {
@@ -219,7 +214,6 @@ export default function CarouselFormPage() {
         },
       };
     });
-    setIsDirty(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -346,7 +340,6 @@ export default function CarouselFormPage() {
         });
       }
 
-      setIsDirty(false);
       router.push("/dashboard/content/carousels");
     } catch (err: any) {
       const msg =
@@ -372,7 +365,7 @@ export default function CarouselFormPage() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-5xl mx-auto space-y-6">
+    <form onSubmit={handleSubmit} className="max-w-5xl mx-auto space-y-6 mb-36">
       {/* Barra superior de navegación */}
       <div className="flex items-center justify-between gap-4">
         <button
@@ -428,39 +421,33 @@ export default function CarouselFormPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-              Ranura / Tipo de Carrusel
-            </label>
-            <select
+            <DropdownSelect
+              label="Ranura / Tipo de Carrusel"
               value={form.slotKey}
-              onChange={(e) => handleFieldChange("slotKey", e.target.value)}
+              onChange={(val) => handleFieldChange("slotKey", val)}
+              options={CAROUSEL_SLOTS.map((s) => ({
+                value: s.key,
+                label: s.label,
+              }))}
               disabled={isEditing}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-            >
-              {CAROUSEL_SLOTS.map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+              placeholder="Seleccionar ranura..."
+            />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-              Campaña asociada (opcional)
-            </label>
-            <select
-              value={form.campaignId}
-              onChange={(e) => handleFieldChange("campaignId", e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-            >
-              <option value="">Ninguna (Permanente / Manual)</option>
-              {campaigns.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <DropdownSelect
+              label="Campaña asociada (opcional)"
+              value={form.campaignId || ""}
+              onChange={(val) => handleFieldChange("campaignId", val)}
+              options={[
+                { value: "", label: "Ninguna (Permanente / Manual)" },
+                ...campaigns.map((c) => ({
+                  value: String(c.id),
+                  label: c.name,
+                })),
+              ]}
+              placeholder="Seleccionar campaña..."
+            />
           </div>
         </div>
 
@@ -538,44 +525,47 @@ export default function CarouselFormPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
               <div>
-                <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
-                  Destino del botón general
-                </label>
-                <select
-                  value={form.config.overlayLinkType}
-                  onChange={(e) =>
-                    handleConfigChange("overlayLinkType", e.target.value)
-                  }
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)]"
-                >
-                  {LINK_TYPES.map((lt) => (
-                    <option key={lt.value} value={lt.value}>
-                      {lt.label}
-                    </option>
-                  ))}
-                </select>
+                <DropdownSelect
+                  label="Destino del botón general"
+                  value={form.config.overlayLinkType || "none"}
+                  onChange={(val) => handleConfigChange("overlayLinkType", val)}
+                  options={LINK_TYPES}
+                  placeholder="Seleccionar destino..."
+                />
               </div>
 
               {form.config.overlayLinkType === "category" && (
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
-                    Categoría destino
-                  </label>
-                  <select
-                    value={form.config.overlayCategoryId}
-                    onChange={(e) =>
-                      handleConfigChange("overlayCategoryId", e.target.value)
-                    }
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)]"
-                  >
-                    <option value="">Seleccioná categoría...</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <ResourceSearchTrigger
+                  label="Categoría destino"
+                  scope="categories"
+                  selectedId={form.config.overlayCategoryId}
+                  selectedName={form.config.overlayCategoryName}
+                  onSelect={(cat) => {
+                    handleConfigChange("overlayCategoryId", cat.id);
+                    handleConfigChange("overlayCategoryName", cat.name);
+                  }}
+                  onClear={() => {
+                    handleConfigChange("overlayCategoryId", "");
+                    handleConfigChange("overlayCategoryName", "");
+                  }}
+                />
+              )}
+
+              {form.config.overlayLinkType === "product" && (
+                <ResourceSearchTrigger
+                  label="Producto destino"
+                  scope="products"
+                  selectedId={form.config.overlayProductId}
+                  selectedName={form.config.overlayProductName}
+                  onSelect={(prod) => {
+                    handleConfigChange("overlayProductId", prod.id);
+                    handleConfigChange("overlayProductName", prod.name);
+                  }}
+                  onClear={() => {
+                    handleConfigChange("overlayProductId", "");
+                    handleConfigChange("overlayProductName", "");
+                  }}
+                />
               )}
 
               {form.config.overlayLinkType === "external" && (
@@ -824,54 +814,52 @@ export default function CarouselFormPage() {
                         )}
                       </div>
 
+                      {/* ... Dentro del map de form.config.slides ... */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                         <div>
-                          <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
-                            Destino del clic
-                          </label>
-                          <select
+                          <DropdownSelect
+                            label="Destino del clic"
                             value={slide.linkType || "none"}
-                            onChange={(e) =>
-                              updateSlideField(
-                                index,
-                                "linkType",
-                                e.target.value,
-                              )
+                            onChange={(val) =>
+                              updateSlideField(index, "linkType", val)
                             }
-                            className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)]"
-                          >
-                            {LINK_TYPES.map((lt) => (
-                              <option key={lt.value} value={lt.value}>
-                                {lt.label}
-                              </option>
-                            ))}
-                          </select>
+                            options={LINK_TYPES}
+                            placeholder="Seleccionar destino..."
+                          />
                         </div>
 
                         {slide.linkType === "category" && (
-                          <div>
-                            <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
-                              Categoría destino
-                            </label>
-                            <select
-                              value={slide.categoryId || ""}
-                              onChange={(e) =>
-                                updateSlideField(
-                                  index,
-                                  "categoryId",
-                                  e.target.value,
-                                )
-                              }
-                              className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)]"
-                            >
-                              <option value="">Seleccioná categoría...</option>
-                              {categories.map((c) => (
-                                <option key={c.id} value={c.id}>
-                                  {c.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                          <ResourceSearchTrigger
+                            label="Categoría destino"
+                            scope="categories"
+                            selectedId={slide.categoryId}
+                            selectedName={slide.categoryName}
+                            onSelect={(cat) => {
+                              updateSlideField(index, "categoryId", cat.id);
+                              updateSlideField(index, "categoryName", cat.name);
+                            }}
+                            onClear={() => {
+                              updateSlideField(index, "categoryId", "");
+                              updateSlideField(index, "categoryName", "");
+                            }}
+                          />
+                        )}
+
+                        {slide.linkType === "product" && (
+                          <ResourceSearchTrigger
+                            label="Producto destino"
+                            scope="products"
+                            selectedId={slide.productId}
+                            selectedName={slide.productName}
+                            onSelect={(prod) => {
+                              updateSlideField(index, "productId", prod.id);
+                              updateSlideField(index, "productName", prod.name);
+                            }}
+                            onClear={() => {
+                              updateSlideField(index, "productId", "");
+                              updateSlideField(index, "productName", "");
+                            }}
+                          />
                         )}
 
                         {slide.linkType === "external" && (

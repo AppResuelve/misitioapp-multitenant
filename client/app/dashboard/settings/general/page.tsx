@@ -17,7 +17,7 @@ import {
 
 export default function GeneralSettings() {
   const Alert = useAlert();
-  const { setIsDirty } = useUnsavedChanges();
+  const { isDirty } = useUnsavedChanges();
 
   const [settings, setSettings] = useState(INITIAL_GENERAL_SETTINGS);
   const [loading, setLoading] = useState(true);
@@ -38,7 +38,6 @@ export default function GeneralSettings() {
 
   const handleChange = (key: string, value: string) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
-    setIsDirty(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -47,7 +46,7 @@ export default function GeneralSettings() {
 
     try {
       await api.put("/admin/settings", settings);
-      setIsDirty(false);
+
       Alert.fire({
         message: GENERAL_SETTINGS_MESSAGES.SAVE_SUCCESS,
         type: "success",

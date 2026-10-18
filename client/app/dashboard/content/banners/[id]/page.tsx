@@ -10,13 +10,14 @@ import { useCampaigns } from "@/hooks/admin-useCampaigns";
 import { useCategories } from "@/hooks/admin-useCategories";
 import { useSiteContent } from "@/hooks/admin-useSiteContent";
 import { siteContentService } from "@/services/siteContent.service";
-import { Button, Input, Spinner } from "@/components/ui";
+import { Button, DropdownSelect, Input, Spinner } from "@/components/ui";
 import ImageUpload from "@/components/admin/ImageUpload";
 import {
   BANNER_SLOTS,
   LINK_TYPES,
   SITE_CONTENT_MESSAGES,
 } from "@/constants/siteContent";
+import ResourceSearchTrigger from "@/components/admin/search/ResourceSearchTrigger";
 
 const EMPTY_BANNER = {
   name: "",
@@ -40,7 +41,7 @@ export default function BannerFormPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const Alert = useAlert();
-  const { setIsDirty, confirmLeave } = useUnsavedChanges();
+  const { confirmLeave } = useUnsavedChanges();
 
   const isEditing = Boolean(id) && id !== "new";
 
@@ -97,14 +98,12 @@ export default function BannerFormPage() {
   const handleBack = async (e: React.MouseEvent) => {
     e.preventDefault();
     if (await confirmLeave()) {
-      setIsDirty(false);
       router.push("/dashboard/content/banners");
     }
   };
 
   const handleFieldChange = (field: string, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }));
-    setIsDirty(true);
   };
 
   const handleConfigChange = (key: string, value: any) => {
@@ -115,7 +114,6 @@ export default function BannerFormPage() {
         [key]: value,
       },
     }));
-    setIsDirty(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -168,7 +166,6 @@ export default function BannerFormPage() {
         });
       }
 
-      setIsDirty(false);
       router.push("/dashboard/content/banners");
     } catch (err: any) {
       const msg =
@@ -190,7 +187,7 @@ export default function BannerFormPage() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-4xl mx-auto space-y-6">
+    <form onSubmit={handleSubmit} className="max-w-4xl mx-auto space-y-6 pb-38">
       {/* Barra de cabecera con volver */}
       <div className="flex items-center justify-between gap-4">
         <button
@@ -242,39 +239,33 @@ export default function BannerFormPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-              Ranura / Espacio
-            </label>
-            <select
+            <DropdownSelect
+              label="Ranura / Espacio"
               value={form.slotKey}
-              onChange={(e) => handleFieldChange("slotKey", e.target.value)}
+              onChange={(val) => handleFieldChange("slotKey", val)}
+              options={BANNER_SLOTS.map((s) => ({
+                value: s.key,
+                label: s.label,
+              }))}
               disabled={isEditing}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-            >
-              {BANNER_SLOTS.map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+              placeholder="Seleccionar ranura..."
+            />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-              Campaña asociada (opcional)
-            </label>
-            <select
-              value={form.campaignId}
-              onChange={(e) => handleFieldChange("campaignId", e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-            >
-              <option value="">Ninguna (Permanente / Manual)</option>
-              {campaigns.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <DropdownSelect
+              label="Campaña asociada (opcional)"
+              value={form.campaignId || ""}
+              onChange={(val) => handleFieldChange("campaignId", val)}
+              options={[
+                { value: "", label: "Ninguna (Permanente / Manual)" },
+                ...campaigns.map((c) => ({
+                  value: String(c.id),
+                  label: c.name,
+                })),
+              ]}
+              placeholder="Seleccionar campaña..."
+            />
           </div>
         </div>
 
@@ -321,43 +312,44 @@ export default function BannerFormPage() {
         {/* Destino del Enlace */}
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-              Destino del clic
-            </label>
-            <select
-              value={form.linkType}
-              onChange={(e) => handleFieldChange("linkType", e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-            >
-              {LINK_TYPES.map((lt) => (
-                <option key={lt.value} value={lt.value}>
-                  {lt.label}
-                </option>
-              ))}
-            </select>
+            <DropdownSelect
+              label="Destino del clic"
+              value={form.linkType || "none"}
+              onChange={(val) => handleFieldChange("linkType", val)}
+              options={LINK_TYPES}
+              placeholder="Seleccionar destino..."
+            />
           </div>
 
           {form.linkType === "category" && (
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-                Seleccionar categoría
-              </label>
-              <select
-                value={form.categoryId}
-                onChange={(e) =>
-                  handleFieldChange("categoryId", e.target.value)
-                }
-                required
-                className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-              >
-                <option value="">Seleccioná una categoría...</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <ResourceSearchTrigger
+              label="Categoría vinculada"
+              scope="categories"
+              selectedId={form.categoryId}
+              selectedName={
+                categories.find((c) => String(c.id) === String(form.categoryId))
+                  ?.name
+              }
+              onSelect={(cat) => handleFieldChange("categoryId", cat.id)}
+              onClear={() => handleFieldChange("categoryId", "")}
+            />
+          )}
+
+          {form.linkType === "product" && (
+            <ResourceSearchTrigger
+              label="Producto específico vinculado"
+              scope="products"
+              selectedId={form.productId}
+              selectedName={form.productName} // o resuelto por ID
+              onSelect={(prod) => {
+                handleFieldChange("productId", prod.id);
+                handleFieldChange("productName", prod.name);
+              }}
+              onClear={() => {
+                handleFieldChange("productId", "");
+                handleFieldChange("productName", "");
+              }}
+            />
           )}
 
           {form.linkType === "external" && (

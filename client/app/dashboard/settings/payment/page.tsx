@@ -35,7 +35,7 @@ import {
 
 export default function PaymentMethodsPage() {
   const Alert = useAlert();
-  const { setIsDirty, confirmLeave } = useUnsavedChanges();
+  const { isDirty, confirmLeave } = useUnsavedChanges();
   const {
     paymentMethods: methods,
     loading,
@@ -69,7 +69,7 @@ export default function PaymentMethodsPage() {
       isActive: true,
       brands: [],
     });
-    setIsDirty(false);
+
     setModalOpen(true);
   };
 
@@ -87,7 +87,7 @@ export default function PaymentMethodsPage() {
       isActive: item.isActive ?? true,
       brands: item.brands || [],
     });
-    setIsDirty(false);
+
     setModalOpen(true);
   };
 
@@ -95,7 +95,6 @@ export default function PaymentMethodsPage() {
     if (await confirmLeave()) {
       setModalOpen(false);
       setEditingItem(null);
-      setIsDirty(false);
     }
   };
 
@@ -107,7 +106,6 @@ export default function PaymentMethodsPage() {
       title: preset ? preset.title : prev.title,
       brands: [], // Resetea las marcas al cambiar de canal para mantener consistencia
     }));
-    setIsDirty(true);
   };
 
   const handleToggleBrand = (presetBrand) => {
@@ -135,7 +133,6 @@ export default function PaymentMethodsPage() {
 
       return { ...prev, brands: nextBrands };
     });
-    setIsDirty(true);
   };
 
   const handleRemoveBrand = (indexToRemove: number) => {
@@ -143,7 +140,6 @@ export default function PaymentMethodsPage() {
       ...prev,
       brands: prev.brands.filter((_, idx) => idx !== indexToRemove),
     }));
-    setIsDirty(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -170,7 +166,6 @@ export default function PaymentMethodsPage() {
         duration: 1500,
       });
 
-      setIsDirty(false);
       setModalOpen(false);
     } catch (err: any) {
       Alert.fire({
@@ -457,7 +452,6 @@ export default function PaymentMethodsPage() {
             value={formData.badge}
             onChange={(e) => {
               setFormData({ ...formData, badge: e.target.value });
-              setIsDirty(true);
             }}
           />
 
@@ -468,7 +462,6 @@ export default function PaymentMethodsPage() {
             value={formData.description}
             onChange={(e) => {
               setFormData({ ...formData, description: e.target.value });
-              setIsDirty(true);
             }}
           />
 
@@ -561,7 +554,6 @@ export default function PaymentMethodsPage() {
               checked={formData.isActive}
               onChange={(e) => {
                 setFormData({ ...formData, isActive: e.target.checked });
-                setIsDirty(true);
               }}
               label="Visible en la tienda pública"
             />

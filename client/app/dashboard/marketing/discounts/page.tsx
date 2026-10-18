@@ -59,7 +59,7 @@ function getDiscountState(d) {
 
 export default function DiscountsPage() {
   const Alert = useAlert();
-  const { setIsDirty, confirmLeave } = useUnsavedChanges();
+  const { confirmLeave } = useUnsavedChanges();
 
   const [discounts, setDiscounts] = useState([]);
   const [overlaps, setOverlaps] = useState([]);
@@ -84,7 +84,7 @@ export default function DiscountsPage() {
 
   const openNew = () => {
     setEditingId("new");
-    setIsDirty(false);
+
     setForm({
       ...EMPTY_DISCOUNT_FORM,
       campaignId: "",
@@ -94,7 +94,7 @@ export default function DiscountsPage() {
 
   const openEdit = (d) => {
     setEditingId(d.id);
-    setIsDirty(false);
+
     setForm({
       name: d.name,
       type: d.type,
@@ -116,13 +116,11 @@ export default function DiscountsPage() {
     if (await confirmLeave()) {
       setEditingId(null);
       setForm(EMPTY_DISCOUNT_FORM);
-      setIsDirty(false);
     }
   };
 
   const setField = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
-    setIsDirty(true);
   };
 
   const toggleId = (key, id) => {
@@ -133,7 +131,6 @@ export default function DiscountsPage() {
         [key]: list.includes(id) ? list.filter((x) => x !== id) : [...list, id],
       };
     });
-    setIsDirty(true);
   };
 
   const buildConfig = () => {
@@ -185,7 +182,7 @@ export default function DiscountsPage() {
         type: "success",
         duration: 1500,
       });
-      setIsDirty(false);
+
       setEditingId(null);
       refetch();
     } catch (err) {

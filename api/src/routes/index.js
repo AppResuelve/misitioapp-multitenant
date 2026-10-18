@@ -35,6 +35,7 @@ const mountRoutes = (app) => {
   app.use("/api/admin/branches", require("./admin/branches.routes"));
   app.use("/api/admin/payment", require("./admin/payment.routes"));
   app.use("/api/admin/campaigns", require("./admin/campaigns.routes"));
+  app.use("/api/admin/search", require("./admin/search.routes"));
 
   // Internal (requiere APPRESUELVE_SECRET — tenant explícito en cada endpoint)
   app.use("/api/internal", require("./internal.routes"));

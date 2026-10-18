@@ -243,7 +243,7 @@ export default function ServiceForm() {
   const [attributes, setAttributes] = useState([]);
   const [selectedAttributes, setSelectedAttributes] = useState({});
   const [saving, setSaving] = useState(false);
-  const { isDirty, setIsDirty, confirmLeave } = useUnsavedChanges();
+  const { isDirty, confirmLeave } = useUnsavedChanges();
   const [loading, setLoading] = useState(isEditing);
   const [slugManual, setSlugManual] = useState(false);
   const [showPriceModal, setShowPriceModal] = useState(false);
@@ -316,7 +316,6 @@ export default function ServiceForm() {
     const next = { ...form, [field]: value };
     if (field === "name" && !slugManual) next.slug = slugify(value);
     setForm(next);
-    setIsDirty(true);
   };
 
   // ── Atributos (modal) ──
@@ -449,7 +448,6 @@ export default function ServiceForm() {
       return;
     }
     if (Object.keys(modalAttrs).length === 0) {
-      setIsDirty(true);
       setSelectedAttributes({});
       setVariants([]);
       setAttrModalOpen(false);
@@ -461,7 +459,7 @@ export default function ServiceForm() {
     }
     setSelectedAttributes(confirmed);
     setAttrModalOpen(false);
-    setIsDirty(true);
+
     handleGenerateSkus(confirmed);
   };
 
@@ -551,7 +549,6 @@ export default function ServiceForm() {
     const nx = [...variants];
     nx[i] = v;
     setVariants(nx);
-    setIsDirty(true);
   };
   const removeVariant = (i) =>
     setVariants(variants.filter((_, idx) => idx !== i));
@@ -602,7 +599,7 @@ export default function ServiceForm() {
         type: "success",
         duration: 1500,
       });
-      setIsDirty(false);
+
       router.push("/dashboard/services");
     } catch (err) {
       let msg = "Error al guardar";

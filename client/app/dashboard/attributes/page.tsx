@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button, Input, Select, Modal, Spinner } from "@/components/ui";
 import { useUnsavedChanges } from "@/context/UnsavedChangesContext";
+import { useFormDirtyTracker } from "@/hooks/admin-useFormDirtyTracker";
 import { useAlert } from "@/context/AlertContext";
 import api from "@/services/admin-api";
 import {
@@ -13,14 +14,31 @@ import {
   ATTRIBUTE_MESSAGES,
 } from "@/constants/attributes";
 
+const EMPTY_ATTRIBUTE_FORM = {
+  name: "",
+  unit_type: "",
+  values: [],
+};
+
 export default function Attributes() {
   const Alert = useAlert();
-  const { setIsDirty, confirmLeave } = useUnsavedChanges();
+  const { confirmLeave } = useUnsavedChanges();
+
   const [attributes, setAttributes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ name: "", unit_type: "", values: [] });
+
+  // Estados del formulario y snapshot base
+  const [form, setForm] = useState(EMPTY_ATTRIBUTE_FORM);
+  const [initialSnapshot, setInitialSnapshot] = useState(null);
+
+  // Tracker con debounce que retorna si el form está sucio
+  const { isDirty } = useFormDirtyTracker(
+    form,
+    initialSnapshot,
+    Boolean(editingId),
+  );
 
   const load = () => {
     setLoading(true);
@@ -36,15 +54,14 @@ export default function Attributes() {
   }, []);
 
   const openNew = () => {
+    const initial = { ...EMPTY_ATTRIBUTE_FORM, values: [] };
+    setForm(initial);
+    setInitialSnapshot(initial);
     setEditingId("new");
-    setForm({ name: "", unit_type: "", values: [] });
-    setIsDirty(false);
   };
 
   const openEdit = (attr) => {
-    setEditingId(attr.id);
-    setIsDirty(false);
-    setForm({
+    const initial = {
       name: attr.name || "",
       unit_type: attr.unitType || "",
       values: (attr.values || []).map((v) => ({
@@ -52,13 +69,17 @@ export default function Attributes() {
         value: v.value,
         sort_order: v.sortOrder || 0,
       })),
-    });
+    };
+    setForm(initial);
+    setInitialSnapshot(initial);
+    setEditingId(attr.id);
   };
 
   const closeForm = async () => {
     if (await confirmLeave()) {
       setEditingId(null);
-      setIsDirty(false);
+      setForm(EMPTY_ATTRIBUTE_FORM);
+      setInitialSnapshot(null);
     }
   };
 
@@ -66,7 +87,6 @@ export default function Attributes() {
     const next = [...form.values];
     next[index] = { ...next[index], value };
     setForm({ ...form, values: next });
-    setIsDirty(true);
   };
 
   const addValue = () => {
@@ -74,12 +94,10 @@ export default function Attributes() {
       ...form,
       values: [...form.values, { value: "", sort_order: form.values.length }],
     });
-    setIsDirty(true);
   };
 
   const removeValue = (index) => {
     setForm({ ...form, values: form.values.filter((_, i) => i !== index) });
-    setIsDirty(true);
   };
 
   const handleSave = async () => {
@@ -87,18 +105,32 @@ export default function Attributes() {
       Alert.fire({
         message: ATTRIBUTE_MESSAGES.NAME_REQUIRED,
         type: "warning",
+        duration: 1500,
       });
       return;
     }
 
-    // Filtrar valores vacíos no intencionales
-    const validValues = form.values
-      .filter((v) => String(v.value).trim() !== "")
-      .map((v, idx) => ({
-        ...(v.id && { id: v.id }),
-        value: String(v.value).trim(),
-        sort_order: idx,
-      }));
+    // Si tiene valores creados, verificar que ninguno esté vacío
+    const hasEmptyValue = form.values.some(
+      (v) => String(v.value ?? "").trim() === "",
+    );
+
+    if (hasEmptyValue) {
+      Alert.fire({
+        message:
+          ATTRIBUTE_MESSAGES.EMPTY_VALUES_NOT_ALLOWED ||
+          "Todos los valores agregados deben tener contenido",
+        type: "warning",
+        duration: 1500,
+      });
+      return;
+    }
+
+    const validValues = form.values.map((v, idx) => ({
+      ...(v.id && { id: v.id }),
+      value: String(v.value).trim(),
+      sort_order: idx,
+    }));
 
     setSaving(true);
     try {
@@ -121,12 +153,18 @@ export default function Attributes() {
             ? ATTRIBUTE_MESSAGES.SAVE_SUCCESS_NEW
             : ATTRIBUTE_MESSAGES.SAVE_SUCCESS_EDIT,
         type: "success",
+        duration: 1500,
       });
-      setIsDirty(false);
+
+      setInitialSnapshot(null);
       setEditingId(null);
       load();
     } catch {
-      Alert.fire({ message: ATTRIBUTE_MESSAGES.SAVE_ERROR, type: "error" });
+      Alert.fire({
+        message: ATTRIBUTE_MESSAGES.SAVE_ERROR,
+        type: "error",
+        duration: 1500,
+      });
     } finally {
       setSaving(false);
     }
@@ -150,10 +188,15 @@ export default function Attributes() {
       Alert.fire({
         message: ATTRIBUTE_MESSAGES.DELETE_SUCCESS,
         type: "success",
+        duration: 1500,
       });
       load();
     } catch {
-      Alert.fire({ message: ATTRIBUTE_MESSAGES.DELETE_ERROR, type: "error" });
+      Alert.fire({
+        message: ATTRIBUTE_MESSAGES.DELETE_ERROR,
+        type: "error",
+        duration: 1500,
+      });
     }
   };
 
@@ -266,10 +309,7 @@ export default function Attributes() {
           <Input
             label="Nombre del atributo"
             value={form.name}
-            onChange={(e) => {
-              setForm({ ...form, name: e.target.value });
-              setIsDirty(true);
-            }}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
             placeholder="Color, Tamaño, Cantidad..."
             required
             autoFocus
@@ -280,10 +320,7 @@ export default function Attributes() {
               label="Tipo de unidad (opcional)"
               value={form.unit_type}
               options={UNIT_OPTIONS}
-              onChange={(e) => {
-                setForm({ ...form, unit_type: e.target.value });
-                setIsDirty(true);
-              }}
+              onChange={(e) => setForm({ ...form, unit_type: e.target.value })}
             />
             {form.unit_type && (
               <p className="text-xs text-[var(--color-text-muted)] mt-1.5 leading-relaxed">
@@ -356,7 +393,7 @@ export default function Attributes() {
             <Button variant="secondary" onClick={closeForm}>
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={saving}>
+            <Button onClick={handleSave} disabled={saving || !isDirty}>
               {saving ? "Guardando..." : "Guardar"}
             </Button>
           </div>

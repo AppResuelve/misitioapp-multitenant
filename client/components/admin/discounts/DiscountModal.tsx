@@ -2,12 +2,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Plus, X, Package, FolderTree } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
 import { useCampaigns } from "@/hooks/admin-useCampaigns";
-import { useCategories } from "@/hooks/admin-useCategories";
-import { useProducts } from "@/hooks/admin-useProducts";
-import { Button, Input, Select, Modal, Checkbox } from "@/components/ui";
+import {
+  Button,
+  Input,
+  Select,
+  DropdownSelect,
+  Modal,
+  Checkbox,
+} from "@/components/ui";
+import FastSearchModal from "@/components/admin/search/FastSearchModal";
 import {
   DISCOUNT_TYPE_OPTIONS,
   DISCOUNT_STATUS_OPTIONS,
@@ -27,33 +33,106 @@ export default function DiscountModal({
 }) {
   const Alert = useAlert();
   const { campaigns } = useCampaigns();
-  const { categories } = useCategories();
-  const { products } = useProducts({ limit: 1000 });
-  const [productSearch, setProductSearch] = useState("");
 
-  const filteredProducts = useMemo(() => {
-    if (!productSearch.trim()) return products;
-    const term = productSearch.toLowerCase();
-    return products.filter((p) => p.name?.toLowerCase().includes(term));
-  }, [products, productSearch]);
+  // Estados locales para los modales de búsqueda
+  const [categorySearchOpen, setCategorySearchOpen] = useState(false);
+  const [productSearchOpen, setProductSearchOpen] = useState(false);
+
+  // Guardamos nombres de items seleccionados para renderizar badges legibles
+  const [selectedItemLabels, setSelectedItemLabels] = useState<
+    Record<string, string>
+  >({});
+
+  const currentCampaign = useMemo(() => {
+    if (!form.campaignId) return null;
+    return (
+      campaigns.find((c) => String(c.id) === String(form.campaignId)) || null
+    );
+  }, [form.campaignId, campaigns]);
+
+  const campaignOptions = useMemo(() => {
+    return [
+      { value: "", label: "Ninguna (Permanente / General)" },
+      ...campaigns.map((c) => ({
+        value: String(c.id),
+        label: c.name,
+      })),
+    ];
+  }, [campaigns]);
 
   const handleCampaignChange = (campaignIdStr: string) => {
     setField("campaignId", campaignIdStr);
-
     if (campaignIdStr) {
       const selectedCamp = campaigns.find(
         (c) => String(c.id) === String(campaignIdStr),
       );
       if (selectedCamp) {
-        // Si no tenía fechas manuales o las quiere sincronizar con la campaña
-        if (selectedCamp.startsAt && !form.startAt) {
+        if (selectedCamp.startsAt)
           setField("startAt", toLocalDatetimeInput(selectedCamp.startsAt));
-        }
-        if (selectedCamp.endsAt && !form.endAt) {
+        if (selectedCamp.endsAt)
           setField("endAt", toLocalDatetimeInput(selectedCamp.endsAt));
-        }
       }
     }
+  };
+
+  const handleDateChange = async (
+    field: "startAt" | "endAt",
+    newValue: string,
+  ) => {
+    if (!currentCampaign) {
+      setField(field, newValue);
+      return;
+    }
+
+    const campDate =
+      field === "startAt"
+        ? currentCampaign.startsAt
+          ? toLocalDatetimeInput(currentCampaign.startsAt)
+          : ""
+        : currentCampaign.endsAt
+          ? toLocalDatetimeInput(currentCampaign.endsAt)
+          : "";
+
+    if (newValue === campDate) {
+      setField(field, newValue);
+      return;
+    }
+
+    const result = await Alert.fire({
+      title: "Desasociar campaña",
+      message: `Este descuento está vinculado a "${currentCampaign.name}". Modificar la fecha desvinculará la campaña. ¿Deseás continuar?`,
+      type: "warning",
+      variant: "modal",
+      showCancelButton: true,
+      confirmButtonText: "Desasociar y cambiar",
+      cancelButtonText: "Mantener campaña",
+    });
+
+    if (result.isConfirmed) {
+      setField("campaignId", "");
+      setField(field, newValue);
+    }
+  };
+
+  const handleSelectResource = (item: any, type: "category" | "product") => {
+    const key = type === "category" ? "categoryIds" : "productIds";
+    const currentList = form[key] || [];
+
+    if (!currentList.includes(item.id)) {
+      setField(key, [...currentList, item.id]);
+      setSelectedItemLabels((prev) => ({
+        ...prev,
+        [`${type}-${item.id}`]: item.name || item.label,
+      }));
+    }
+  };
+
+  const handleRemoveResource = (id: number, type: "category" | "product") => {
+    const key = type === "category" ? "categoryIds" : "productIds";
+    setField(
+      key,
+      (form[key] || []).filter((itemId: number) => itemId !== id),
+    );
   };
 
   const validateAndSave = () => {
@@ -130,214 +209,257 @@ export default function DiscountModal({
   };
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={isEditing ? "Editar descuento" : "Nuevo descuento"}
-      size="xl"
-    >
-      <div className="space-y-4">
-        <Input
-          label="Nombre"
-          value={form.name}
-          onChange={(e) => setField("name", e.target.value)}
-          placeholder="Ej: Descuento de fin de semana, Hot Sale..."
-          required
-          autoFocus
-        />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Select
-            label="Tipo de descuento"
-            value={form.type}
-            onChange={(e) => setField("type", e.target.value)}
-            options={DISCOUNT_TYPE_OPTIONS}
-          />
+    <>
+      <Modal
+        open={open}
+        onClose={onClose}
+        title={isEditing ? "Editar descuento" : "Nuevo descuento"}
+        size="xl"
+      >
+        <div className="space-y-4">
           <Input
-            label="Porcentaje (%)"
-            type="number"
-            min="1"
-            max="100"
-            value={form.percentage}
-            onChange={(e) => setField("percentage", e.target.value)}
-            placeholder="Ej: 15"
+            label="Nombre"
+            value={form.name}
+            onChange={(e) => setField("name", e.target.value)}
+            placeholder="Ej: Descuento de fin de semana, Hot Sale..."
             required
+            autoFocus
           />
-        </div>
 
-        {/* Selector de Campaña Asociada */}
-        <div>
-          <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-            Campaña asociada (opcional)
-          </label>
-          <select
-            value={form.campaignId || ""}
-            onChange={(e) => handleCampaignChange(e.target.value)}
-            className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-base)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-          >
-            <option value="">Ninguna (Permanente / General)</option>
-            {campaigns.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Condicional: Por Categoría */}
-        {form.type === "category" && (
-          <div>
-            <span className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-              Categorías participantes
-            </span>
-            <div className="max-h-48 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-base)] p-3 space-y-1.5">
-              {categories.map((c) => (
-                <label
-                  key={c.id}
-                  className="flex items-center gap-2.5 text-sm text-[var(--color-text-primary)] cursor-pointer py-1 hover:opacity-80 transition-opacity"
-                >
-                  <Checkbox
-                    checked={form.categoryIds.includes(c.id)}
-                    onChange={() => toggleId("categoryIds", c.id)}
-                  />
-                  <span>{c.name}</span>
-                </label>
-              ))}
-              {categories.length === 0 && (
-                <p className="text-xs text-[var(--color-text-muted)] italic py-2 text-center">
-                  No hay categorías disponibles
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Condicional: Rango de Precio */}
-        {form.type === "price_range" && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Precio mínimo ($)"
-              type="number"
-              min="0"
-              value={form.min}
-              onChange={(e) => setField("min", e.target.value)}
-              placeholder="0"
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <DropdownSelect
+              label="Tipo de descuento"
+              value={form.type}
+              onChange={(val) => setField("type", val)}
+              options={DISCOUNT_TYPE_OPTIONS}
             />
             <Input
-              label="Precio máximo ($)"
+              label="Porcentaje (%)"
               type="number"
-              min="0"
-              value={form.max}
-              onChange={(e) => setField("max", e.target.value)}
-              placeholder="Sin límite"
-            />
-          </div>
-        )}
-
-        {/* Condicional: Por Productos */}
-        {form.type === "products" && (
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-sm font-medium text-[var(--color-text-secondary)]">
-                Productos seleccionados ({form.productIds.length})
-              </span>
-            </div>
-            <div className="relative mb-2">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
-              <input
-                type="text"
-                placeholder="Buscar producto por nombre..."
-                value={productSearch}
-                onChange={(e) => setProductSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 bg-[var(--color-bg-base)] border border-[var(--color-border)] rounded-lg text-xs text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-              />
-            </div>
-            <div className="max-h-48 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-base)] p-3 space-y-1.5">
-              {filteredProducts.map((p) => (
-                <label
-                  key={p.id}
-                  className="flex items-center gap-2.5 text-sm text-[var(--color-text-primary)] cursor-pointer py-1 hover:opacity-80 transition-opacity"
-                >
-                  <Checkbox
-                    checked={form.productIds.includes(p.id)}
-                    onChange={() => toggleId("productIds", p.id)}
-                  />
-                  <span className="truncate">{p.name}</span>
-                </label>
-              ))}
-              {filteredProducts.length === 0 && (
-                <p className="text-xs text-[var(--color-text-muted)] italic py-2 text-center">
-                  No se encontraron productos
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Condicional: Total de Carrito */}
-        {form.type === "cart_total" && (
-          <div className="space-y-4">
-            <Input
-              label="Monto mínimo del carrito ($)"
-              type="number"
-              min="0"
-              value={form.minAmount}
-              onChange={(e) => setField("minAmount", e.target.value)}
-              placeholder="50000"
+              min="1"
+              max="100"
+              value={form.percentage}
+              onChange={(e) => setField("percentage", e.target.value)}
+              placeholder="Ej: 15"
               required
             />
-            <label className="flex items-start gap-2.5 text-sm text-[var(--color-text-secondary)] cursor-pointer">
-              <Checkbox
-                checked={form.countDiscounted}
-                onChange={(e) => setField("countDiscounted", e.target.checked)}
-                className="mt-0.5"
-              />
-              <span>
-                Los productos ya rebajados cuentan para el monto mínimo y
-                reciben este descuento acumulado.
-              </span>
-            </label>
           </div>
-        )}
 
-        {/* Fechas */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input
-            label="Fecha y hora de inicio"
-            type="datetime-local"
-            value={form.startAt}
-            onChange={(e) => setField("startAt", e.target.value)}
-            required
+          <div>
+            <DropdownSelect
+              label="Campaña asociada (opcional)"
+              value={form.campaignId || ""}
+              onChange={handleCampaignChange}
+              options={campaignOptions}
+              placeholder="Seleccionar campaña..."
+            />
+          </div>
+
+          {/* Categorías con FastSearch */}
+          {form.type === "category" && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-[var(--color-text-secondary)]">
+                  Categorías participantes ({form.categoryIds.length})
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setCategorySearchOpen(true)}
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Agregar categoría
+                </Button>
+              </div>
+
+              {form.categoryIds.length > 0 ? (
+                <div className="flex flex-wrap gap-2 p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-base)]">
+                  {form.categoryIds.map((id) => (
+                    <span
+                      key={id}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] border border-[var(--color-border)] shadow-2xs"
+                    >
+                      <FolderTree className="w-3 h-3 text-[var(--color-primary-text)]" />
+                      <span>
+                        {selectedItemLabels[`category-${id}`] ||
+                          `Categoría #${id}`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveResource(id, "category")}
+                        className="hover:text-red-500 cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--color-text-muted)] italic p-3 rounded-lg border border-dashed border-[var(--color-border)] text-center">
+                  Sin categorías seleccionadas. Hacé clic en &quot;Agregar
+                  categoría&quot; para buscar.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Productos con FastSearch */}
+          {form.type === "products" && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-[var(--color-text-secondary)]">
+                  Productos participantes ({form.productIds.length})
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setProductSearchOpen(true)}
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Agregar producto
+                </Button>
+              </div>
+
+              {form.productIds.length > 0 ? (
+                <div className="flex flex-wrap gap-2 p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-base)] max-h-48 overflow-y-auto">
+                  {form.productIds.map((id) => (
+                    <span
+                      key={id}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] border border-[var(--color-border)] shadow-2xs"
+                    >
+                      <Package className="w-3 h-3 text-[var(--color-primary-text)]" />
+                      <span>
+                        {selectedItemLabels[`product-${id}`] ||
+                          `Producto #${id}`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveResource(id, "product")}
+                        className="hover:text-red-500 cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--color-text-muted)] italic p-3 rounded-lg border border-dashed border-[var(--color-border)] text-center">
+                  Sin productos seleccionados. Hacé clic en &quot;Agregar
+                  producto&quot; para buscar.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Rango de precio */}
+          {form.type === "price_range" && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Precio mínimo ($)"
+                type="number"
+                min="0"
+                value={form.min}
+                onChange={(e) => setField("min", e.target.value)}
+                placeholder="0"
+              />
+              <Input
+                label="Precio máximo ($)"
+                type="number"
+                min="0"
+                value={form.max}
+                onChange={(e) => setField("max", e.target.value)}
+                placeholder="Sin límite"
+              />
+            </div>
+          )}
+
+          {/* Total de carrito */}
+          {form.type === "cart_total" && (
+            <div className="space-y-4">
+              <Input
+                label="Monto mínimo del carrito ($)"
+                type="number"
+                min="0"
+                value={form.minAmount}
+                onChange={(e) => setField("minAmount", e.target.value)}
+                placeholder="50000"
+                required
+              />
+              <label className="flex items-start gap-2.5 text-sm text-[var(--color-text-secondary)] cursor-pointer">
+                <Checkbox
+                  checked={form.countDiscounted}
+                  onChange={(e) =>
+                    setField("countDiscounted", e.target.checked)
+                  }
+                  className="mt-0.5"
+                />
+                <span>
+                  Los productos ya rebajados cuentan para el monto mínimo y
+                  reciben este descuento acumulado.
+                </span>
+              </label>
+            </div>
+          )}
+
+          {/* Fechas */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Fecha y hora de inicio"
+              type="datetime-local"
+              value={form.startAt}
+              onChange={(e) => handleDateChange("startAt", e.target.value)}
+              required
+            />
+            <Input
+              label="Fecha y hora de fin (opcional)"
+              type="datetime-local"
+              value={form.endAt}
+              onChange={(e) => handleDateChange("endAt", e.target.value)}
+            />
+          </div>
+
+          <DropdownSelect
+            label="Estado"
+            value={form.status}
+            onChange={(val) => setField("status", val)}
+            options={DISCOUNT_STATUS_OPTIONS}
           />
-          <Input
-            label="Fecha y hora de fin (opcional)"
-            type="datetime-local"
-            value={form.endAt}
-            onChange={(e) => setField("endAt", e.target.value)}
-          />
-        </div>
 
-        <Select
-          label="Estado"
-          value={form.status}
-          onChange={(e) => setField("status", e.target.value)}
-          options={DISCOUNT_STATUS_OPTIONS}
-        />
-
-        <div className="flex gap-3 justify-end pt-3 border-t border-[var(--color-border)]">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={onClose}
-            disabled={saving}
-          >
-            Cancelar
-          </Button>
-          <Button onClick={validateAndSave} disabled={saving}>
-            {saving ? "Guardando..." : "Guardar descuento"}
-          </Button>
+          <div className="flex gap-3 justify-end pt-3 border-t border-[var(--color-border)]">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={onClose}
+              disabled={saving}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={validateAndSave} disabled={saving}>
+              {saving ? "Guardando..." : "Guardar descuento"}
+            </Button>
+          </div>
         </div>
-      </div>
-    </Modal>
+      </Modal>
+
+      {/* Modal buscador de categorías */}
+      <FastSearchModal
+        open={categorySearchOpen}
+        onClose={() => setCategorySearchOpen(false)}
+        scope="categories"
+        lockScope={true}
+        onSelect={(item) => handleSelectResource(item, "category")}
+      />
+
+      {/* Modal buscador de productos */}
+      <FastSearchModal
+        open={productSearchOpen}
+        onClose={() => setProductSearchOpen(false)}
+        scope="products"
+        lockScope={true}
+        onSelect={(item) => handleSelectResource(item, "product")}
+      />
+    </>
   );
 }
