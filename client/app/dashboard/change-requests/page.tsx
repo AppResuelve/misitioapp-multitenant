@@ -1,8 +1,13 @@
 // @ts-nocheck
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useAlert } from "@/context/AlertContext";
 import {
-  Wrench,
+  useChangeRequests,
+  useChangeRequestsRemaining,
+  useModules,
+} from "@/hooks/admin-useChangeRequests";
+import {
   Send,
   Clock,
   CheckCircle,
@@ -14,16 +19,7 @@ import {
   Search,
   FolderOpen,
 } from "lucide-react";
-import { Button } from "@/components/ui/Form";
-import { Card } from "@/components/ui/Card";
-import { Modal } from "@/components/ui/Modal";
-import { useAlert } from "@/context/AlertContext";
-import {
-  useChangeRequests,
-  useChangeRequestsRemaining,
-  useModules,
-} from "@/hooks/admin-useChangeRequests";
-import { Spinner } from "@/components/ui/Spinner";
+import { Button, Card, Modal, Spinner } from "@/components/ui";
 import api from "@/services/admin-api";
 
 const STATUS_MAP = {

@@ -1,29 +1,28 @@
 // @ts-nocheck
 "use client";
+
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Upload, Trash2, Copy, Check, RotateCcw } from "lucide-react";
-import { Button } from "@/components/ui/Form";
-import { DropdownSelect } from "@/components/ui/DropdownSelect";
-import { Card } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
-import { uploadImage } from "@/services/admin-api";
 import { useAlert } from "@/context/AlertContext";
+import { uploadImage } from "@/services/admin-api";
+import { compressImages } from "@/utils/compressImage";
+import { Upload, Trash2, Copy, Check, RotateCcw } from "lucide-react";
+import {
+  Button,
+  DropdownSelect,
+  Card,
+  Spinner,
+  Pagination,
+} from "@/components/ui";
 import api from "@/services/admin-api";
+import {
+  MEDIA_TABS,
+  UPLOAD_FOLDERS,
+  MEDIA_PAGE_SIZE,
+  MEDIA_MESSAGES,
+} from "@/constants/media";
 
-const TABS = [
-  { key: "todos", label: "Todos" },
-  { key: "galeria", label: "Galería" },
-  { key: "productos", label: "Productos" },
-  { key: "branding", label: "Branding" },
-  { key: "servicios", label: "Servicios" },
-];
-
-const UPLOAD_FOLDERS = ["galeria", "productos", "branding", "servicios"];
-
-const PAGE_SIZE = 50;
-
-const folderLabel = (folder) => {
-  const t = TABS.find((t) => t.key === folder);
+const folderLabel = (folder: string) => {
+  const t = MEDIA_TABS.find((tab) => tab.key === folder);
   return t ? t.label : folder;
 };
 
@@ -37,6 +36,7 @@ export default function Media() {
   const [page, setPage] = useState(1);
   const [uploadFolder, setUploadFolder] = useState("galeria");
   const [emptying, setEmptying] = useState(false);
+
   const fileInputRef = useRef(null);
   const Alert = useAlert();
 
@@ -45,9 +45,9 @@ export default function Media() {
   const fetchMedia = async () => {
     try {
       const { data } = await api.get("/admin/upload");
-      setMedia(data);
+      setMedia(data || []);
     } catch {
-      // ignore
+      Alert.fire({ message: "Error al cargar galería", type: "error" });
     } finally {
       setLoading(false);
     }
@@ -59,9 +59,9 @@ export default function Media() {
       const { data } = await api.get("/admin/upload", {
         params: { trash: true },
       });
-      setTrashMedia(data);
+      setTrashMedia(data || []);
     } catch {
-      // ignore
+      Alert.fire({ message: "Error al cargar papelera", type: "error" });
     } finally {
       setLoading(false);
     }
@@ -81,25 +81,40 @@ export default function Media() {
     return media.filter((m) => m.folder === tab);
   }, [media, trashMedia, tab, isTrash]);
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.ceil(filtered.length / MEDIA_PAGE_SIZE);
+  const paged = filtered.slice(
+    (page - 1) * MEDIA_PAGE_SIZE,
+    page * MEDIA_PAGE_SIZE,
+  );
 
   useEffect(() => {
     setPage(1);
   }, [tab]);
 
   const handleUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
+    const rawFiles = Array.from(e.target.files || []);
+    if (!rawFiles.length) return;
 
     setUploading(true);
     try {
-      for (const file of files) {
-        await uploadImage(file, uploadFolder);
+      const files = await compressImages(rawFiles);
+      const results = await Promise.allSettled(
+        files.map((file) => uploadImage(file, uploadFolder)),
+      );
+
+      const rejected = results.filter((r) => r.status === "rejected");
+      if (rejected.length > 0) {
+        Alert.fire({
+          message: `${rejected.length} imagen(es) no pudieron subirse`,
+          type: "warning",
+        });
+      } else {
+        Alert.fire({ message: MEDIA_MESSAGES.UPLOAD_SUCCESS, type: "success" });
       }
+
       await fetchMedia();
     } catch {
-      Alert.fire({ message: "Error al subir imagen", type: "error" });
+      Alert.fire({ message: MEDIA_MESSAGES.UPLOAD_ERROR, type: "error" });
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -109,9 +124,8 @@ export default function Media() {
   const handleDelete = async (item) => {
     if (isTrash) {
       const result = await Alert.fire({
-        title: "¿Eliminar definitivamente?",
-        message:
-          "La imagen se borrará de Cloudinary y todos los productos que la usan perderán la imagen. Esta acción es irreversible.",
+        title: MEDIA_MESSAGES.FORCE_DELETE_TITLE,
+        message: MEDIA_MESSAGES.FORCE_DELETE_WARNING,
         type: "warning",
         variant: "modal",
         showCancelButton: true,
@@ -119,6 +133,7 @@ export default function Media() {
         cancelButtonText: "Cancelar",
       });
       if (!result.isConfirmed) return;
+
       try {
         await api.delete(`/admin/upload/${item.id}/force`);
         fetchTrash();
@@ -135,7 +150,7 @@ export default function Media() {
         const names = usage.products.map((p) => `• ${p.name}`).join("\n");
         const result = await Alert.fire({
           title: "Imagen en uso",
-          message: `Esta imagen está siendo usada por ${usage.count} producto(s):\n\n${names}\n\nSi la eliminás, pasará a la papelera y estos productos seguirán viéndola. Para borrarla definitivamente, vaciá la papelera.`,
+          message: `Esta imagen está siendo usada por ${usage.count} producto(s):\n\n${names}\n\nSi la eliminás, pasará a la papelera. Para borrarla definitivamente, vaciá la papelera.`,
           type: "warning",
           variant: "modal",
           showCancelButton: true,
@@ -145,8 +160,8 @@ export default function Media() {
         if (!result.isConfirmed) return;
       } else {
         const result = await Alert.fire({
-          title: "¿Eliminar imagen?",
-          message: "La imagen se moverá a la papelera.",
+          title: MEDIA_MESSAGES.DELETE_CONFIRM_TITLE,
+          message: MEDIA_MESSAGES.DELETE_CONFIRM_TRASH,
           type: "warning",
           variant: "modal",
           showCancelButton: true,
@@ -167,16 +182,16 @@ export default function Media() {
     try {
       await api.post(`/admin/upload/${item.id}/restore`);
       fetchTrash();
-      Alert.fire({ message: "Imagen restaurada", type: "success" });
+      Alert.fire({ message: MEDIA_MESSAGES.RESTORE_SUCCESS, type: "success" });
     } catch {
-      Alert.fire({ message: "Error al restaurar", type: "error" });
+      Alert.fire({ message: MEDIA_MESSAGES.RESTORE_ERROR, type: "error" });
     }
   };
 
   const handleEmptyTrash = async () => {
     const result = await Alert.fire({
-      title: "¿Vaciar papelera?",
-      message: `Se eliminarán definitivamente ${trashMedia.length} imagen(es) de Cloudinary. Los productos que las usaban perderán la imagen.`,
+      title: MEDIA_MESSAGES.EMPTY_TRASH_TITLE,
+      message: MEDIA_MESSAGES.EMPTY_TRASH_WARNING(trashMedia.length),
       type: "warning",
       variant: "modal",
       showCancelButton: true,
@@ -190,7 +205,7 @@ export default function Media() {
       const { data } = await api.post("/admin/upload/trash/empty");
       setTrashMedia([]);
       Alert.fire({
-        message: `${data.deleted} imágenes eliminadas`,
+        message: MEDIA_MESSAGES.EMPTY_TRASH_SUCCESS(data.deleted),
         type: "success",
       });
     } catch {
@@ -208,15 +223,17 @@ export default function Media() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-100">Galería</h1>
-          <p className="text-sm text-zinc-500">
+          <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
+            Galería
+          </h1>
+          <p className="text-sm text-[var(--color-text-muted)] mt-0.5">
             {isTrash
               ? `${trashMedia.length} en papelera`
-              : `${filtered.length} imágenes`}
+              : `${filtered.length} imágenes registradas`}
           </p>
         </div>
 
@@ -238,7 +255,7 @@ export default function Media() {
               }))}
               value={uploadFolder}
               onChange={(v) => setUploadFolder(v as string)}
-              className="w-40"
+              className="w-44"
             />
             <input
               ref={fileInputRef}
@@ -260,55 +277,63 @@ export default function Media() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-4 overflow-x-auto pb-1">
-        {[...TABS, { key: "papelera", label: "Papelera" }].map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors
-              ${
-                tab === t.key
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        {[...MEDIA_TABS, { key: "papelera", label: "Papelera" }].map((t) => {
+          const isActive = tab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                isActive
                   ? t.key === "papelera"
-                    ? "bg-red-500/10 text-red-400"
-                    : "bg-cyan-500/10 text-cyan-400"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                    ? "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20"
+                    : "bg-[var(--color-primary-light)] text-[var(--color-primary-text)] border border-[var(--color-primary)]/20"
+                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)] border border-transparent"
               }`}
-          >
-            {t.label}
-            {t.key === "papelera" && trashMedia.length > 0 && (
-              <span className="ml-1 text-zinc-500">({trashMedia.length})</span>
-            )}
-          </button>
-        ))}
+            >
+              {t.label}
+              {t.key === "papelera" && trashMedia.length > 0 && (
+                <span className="ml-1 opacity-75">({trashMedia.length})</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Content */}
-      <div className="relative min-h-[200px]">
+      <div className="relative min-h-[220px]">
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center z-10">
-            <Spinner />
+          <div className="absolute inset-0 flex items-center justify-center z-10 bg-[var(--color-bg-base)]/60 backdrop-blur-xs">
+            <Spinner size="lg" />
           </div>
         )}
-        {filtered.length === 0 ? (
+
+        {filtered.length === 0 && !loading ? (
           <Card>
-            <div className="text-center py-12">
+            <div className="text-center py-16">
               {isTrash ? (
                 <>
-                  <Trash2 className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
-                  <p className="text-zinc-500">Papelera vacía</p>
-                  <p className="text-sm text-zinc-600 mt-1">
-                    Las imágenes que elimines aparecerán acá
+                  <Trash2 className="w-10 h-10 text-[var(--color-text-muted)] mx-auto mb-3 opacity-60" />
+                  <p className="font-semibold text-[var(--color-text-primary)]">
+                    Papelera vacía
+                  </p>
+                  <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                    Las imágenes que elimines aparecerán acá antes de su borrado
+                    definitivo.
                   </p>
                 </>
               ) : (
                 <>
-                  <Upload className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
-                  <p className="text-zinc-500">No hay imágenes</p>
-                  <p className="text-sm text-zinc-600 mt-1">
+                  <Upload className="w-10 h-10 text-[var(--color-text-muted)] mx-auto mb-3 opacity-60" />
+                  <p className="font-semibold text-[var(--color-text-primary)]">
+                    No hay imágenes
+                  </p>
+                  <p className="text-xs text-[var(--color-text-muted)] mt-1">
                     {tab === "todos"
-                      ? "Subí imágenes para empezar"
-                      : `La carpeta "${folderLabel(tab)}" está vacía`}
+                      ? "Subí imágenes para empezar a enriquecer tu catálogo."
+                      : `La carpeta "${folderLabel(tab)}" está vacía.`}
                   </p>
                 </>
               )}
@@ -316,46 +341,55 @@ export default function Media() {
           </Card>
         ) : (
           <>
-            <Card>
-              <div className="divide-y divide-zinc-800">
+            <Card className="p-0 overflow-hidden">
+              <div className="divide-y divide-[var(--color-border)]">
                 {paged.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-center gap-3 px-4 py-3 first:rounded-t-xl last:rounded-b-xl hover:bg-zinc-800/30 transition-colors group"
+                    className="flex items-center gap-3.5 px-4 py-3 hover:bg-[var(--color-bg-elevated)]/40 transition-colors group"
                   >
-                    <img
-                      src={item.url}
-                      alt={item.publicId}
-                      className="w-5 h-5 rounded object-cover shrink-0"
-                    />
+                    <div className="w-10 h-10 rounded-lg overflow-hidden bg-[var(--color-bg-base)] border border-[var(--color-border)] shrink-0 flex items-center justify-center">
+                      <img
+                        src={item.url}
+                        alt={item.publicId}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                    </div>
+
                     {!isTrash && (
-                      <span className="text-xs text-zinc-500 w-18 shrink-0">
+                      <span className="text-xs font-medium text-[var(--color-text-muted)] px-2 py-0.5 rounded-md bg-[var(--color-bg-elevated)] shrink-0">
                         {folderLabel(item.folder)}
                       </span>
                     )}
-                    <span className="flex-1 text-sm text-zinc-300 truncate font-mono">
+
+                    <span className="flex-1 text-sm text-[var(--color-text-primary)] truncate font-mono">
                       {item.publicId}
                     </span>
+
                     {isTrash && (
-                      <span className="text-xs text-zinc-600 shrink-0">
+                      <span className="text-xs text-[var(--color-text-muted)] shrink-0">
                         {item.deletedAt
                           ? new Date(item.deletedAt).toLocaleDateString()
                           : ""}
                       </span>
                     )}
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+
+                    <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
                       {isTrash ? (
                         <>
                           <button
+                            type="button"
                             onClick={() => handleRestore(item)}
-                            className="p-1.5 rounded-lg text-zinc-500 hover:text-emerald-400 hover:bg-zinc-700 transition-colors"
+                            className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors cursor-pointer"
                             title="Restaurar"
                           >
                             <RotateCcw className="w-4 h-4" />
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleDelete(item)}
-                            className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-700 transition-colors"
+                            className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
                             title="Eliminar definitivamente"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -364,19 +398,21 @@ export default function Media() {
                       ) : (
                         <>
                           <button
+                            type="button"
                             onClick={() => handleCopy(item.url, item.id)}
-                            className="p-1.5 rounded-lg text-zinc-500 hover:text-cyan-400 hover:bg-zinc-700 transition-colors"
+                            className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-primary-text)] hover:bg-[var(--color-bg-elevated)] transition-colors cursor-pointer"
                             title="Copiar URL"
                           >
                             {copiedId === item.id ? (
-                              <Check className="w-4 h-4 text-emerald-400" />
+                              <Check className="w-4 h-4 text-emerald-500" />
                             ) : (
                               <Copy className="w-4 h-4" />
                             )}
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleDelete(item)}
-                            className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-700 transition-colors"
+                            className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
                             title="Mover a papelera"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -389,33 +425,19 @@ export default function Media() {
               </div>
             </Card>
 
-            {/* Pagination */}
+            {/* Pagination Component */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-4 text-sm">
-                <span className="text-zinc-500">
-                  {(page - 1) * PAGE_SIZE + 1}–
-                  {Math.min(page * PAGE_SIZE, filtered.length)} de{" "}
-                  {filtered.length}
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[var(--color-text-muted)]">
+                <span>
+                  Mostrando {(page - 1) * MEDIA_PAGE_SIZE + 1}–
+                  {Math.min(page * MEDIA_PAGE_SIZE, filtered.length)} de{" "}
+                  {filtered.length} imágenes
                 </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                    className="px-2 py-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-xs"
-                  >
-                    Anterior
-                  </button>
-                  <span className="text-zinc-600 text-xs px-1">
-                    {page}/{totalPages}
-                  </span>
-                  <button
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={page === totalPages}
-                    className="px-2 py-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-xs"
-                  >
-                    Siguiente
-                  </button>
-                </div>
+                <Pagination
+                  page={page}
+                  totalPages={totalPages}
+                  onPageChange={setPage}
+                />
               </div>
             )}
           </>

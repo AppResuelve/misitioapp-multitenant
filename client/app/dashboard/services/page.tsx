@@ -1,15 +1,13 @@
 // @ts-nocheck
 "use client";
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Edit, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/Form";
-import { Table } from "@/components/ui/Table";
-import { Spinner } from "@/components/ui/Spinner";
 import { useAlert } from "@/context/AlertContext";
-import api from "@/services/admin-api";
+import Link from "next/link";
+import { Plus, Search, Edit, Trash2 } from "lucide-react";
+import { Spinner, Button, Table } from "@/components/ui";
 import { formatPrice } from "@/utils/formatData";
+import api from "@/services/admin-api";
 
 export default function Services() {
   const router = useRouter();

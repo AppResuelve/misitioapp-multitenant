@@ -41,7 +41,12 @@ const models = {
   PaymentMethod: require("./PaymentMethod")(
     sequelize,
     require("sequelize").DataTypes,
-  ), // 👈 1. Importar
+  ),
+  Campaign: require("./Campaign")(sequelize, require("sequelize").DataTypes),
+  SiteContent: require("./SiteContent")(
+    sequelize,
+    require("sequelize").DataTypes,
+  ),
 };
 
 // Modelos que pertenecen a un tenant (todos menos Tenant)
@@ -64,6 +69,8 @@ const TENANTED_MODELS = [
   "Discount",
   "Branch",
   "PaymentMethod",
+  "Campaign",
+  "SiteContent",
 ];
 
 Object.keys(models).forEach((modelName) => {

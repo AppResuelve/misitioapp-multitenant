@@ -1,55 +1,91 @@
 // @ts-nocheck
 "use client";
 
-import { Button } from "@/components/ui/Form";
+import { useState } from "react";
 import { Download } from "lucide-react";
+import { Card, Button, Spinner } from "@/components/ui";
+import { useAlert } from "@/context/AlertContext";
 import { downloadTemplate } from "@/utils/excel";
+import { triggerBlobDownload } from "@/utils/downloadBlob";
+import { DATA_SETTINGS_MESSAGES } from "@/constants/dataSettings";
 import api from "@/services/admin-api";
 
 export default function DataSettings() {
+  const Alert = useAlert();
+  const [exporting, setExporting] = useState(false);
+
   const handleDownloadProducts = async () => {
+    setExporting(true);
     try {
       const { data } = await api.get("/admin/products/export", {
         responseType: "blob",
       });
-      const url = window.URL.createObjectURL(new Blob([data]));
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "productos.xlsx";
-      a.click();
-      window.URL.revokeObjectURL(url);
+
+      triggerBlobDownload(new Blob([data]), "productos.xlsx");
+      Alert.fire({
+        message: DATA_SETTINGS_MESSAGES.EXPORT_SUCCESS,
+        type: "success",
+        duration: 1500,
+      });
     } catch {
-      // silent fail
+      Alert.fire({
+        message: DATA_SETTINGS_MESSAGES.EXPORT_ERROR,
+        type: "error",
+      });
+    } finally {
+      setExporting(false);
     }
   };
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold text-zinc-100 mb-6">Datos</h1>
+    <div className="max-w-5xl mx-auto space-y-6">
+      <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
+        Datos
+      </h1>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-zinc-100 mb-2">
-          Planillas de productos
-        </h2>
-        <p className="text-sm text-zinc-400 mb-4">
-          Descargá la planilla con todos tus productos para editarlos en Excel y
-          volver a importarlos.
-        </p>
-        <div className="flex flex-wrap gap-3">
+      <Card className="p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+            Planillas de productos
+          </h2>
+          <p className="text-sm text-[var(--color-text-secondary)] mt-1 max-w-xl">
+            Descargá la planilla con todos tus productos para editarlos de forma
+            masiva en Excel y volver a importarlos cuando quieras.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-3 pt-2">
           <Button
             type="button"
             variant="secondary"
             onClick={handleDownloadProducts}
+            disabled={exporting}
+            className="gap-2"
+          >
+            {exporting ? (
+              <Spinner size="sm" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            <span>
+              {exporting
+                ? "Generando planilla..."
+                : "Descargar planilla de productos"}
+            </span>
+          </Button>
+
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={downloadTemplate}
+            disabled={exporting}
+            className="gap-2"
           >
             <Download className="w-4 h-4" />
-            Descargar planilla de productos
-          </Button>
-          <Button type="button" variant="secondary" onClick={downloadTemplate}>
-            <Download className="w-4 h-4" />
-            Descargar plantilla vacía
+            <span>Descargar plantilla vacía</span>
           </Button>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

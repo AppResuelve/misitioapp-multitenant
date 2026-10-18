@@ -4,8 +4,8 @@ import { useState, useRef } from "react";
 import { Upload, X } from "lucide-react";
 import { uploadImage } from "@/services/admin-api";
 import { compressImages } from "@/utils/compressImage";
-import { Spinner } from "../ui/Spinner";
-import { useAlert } from "../../context/AlertContext";
+import { Spinner } from "@/components/ui/Spinner";
+import { useAlert } from "@/context/AlertContext";
 
 export default function ImageUpload({
   images = [],
@@ -95,31 +95,25 @@ export default function ImageUpload({
 
   return (
     <div>
-      <label className="block text-sm font-medium text-zinc-400 mb-2">
-        {label || `Imágenes (${images.length}/${max})`}
-      </label>
-      <p className="text-xs text-zinc-500 -mt-1 mb-3">
-        jpg, png, webp, gif — Máx. 10MB
-      </p>
-
       <div
-        className={`grid gap-2 lg:gap-3  ${colClasses[cols] || "grid-cols-4"}`}
+        className={`grid gap-2 lg:gap-3 ${colClasses[cols] || "grid-cols-4"}`}
       >
         {images.map((url, i) => (
           <div
             key={i}
-            className="relative group aspect-square rounded-lg overflow-hidden bg-zinc-800 border border-zinc-700"
+            className="relative group aspect-square rounded-lg overflow-hidden bg-[var(--color-bg-base)] border border-[var(--color-border)] shadow-xs"
           >
             <img src={url} alt="" className="w-full h-full object-cover" />
             <button
               type="button"
               onClick={() => handleRemove(i)}
-              className="absolute top-1 right-1 p-1 rounded-md bg-red-500/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute top-1.5 right-1.5 p-1 rounded-md bg-red-600/90 hover:bg-red-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer shadow-sm"
+              title="Eliminar imagen"
             >
-              <X className="w-3 h-3" />
+              <X className="w-3.5 h-3.5" />
             </button>
             {i === 0 && (
-              <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-cyan-500 text-white">
+              <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-primary)] text-white shadow-sm">
                 Principal
               </span>
             )}
@@ -131,14 +125,14 @@ export default function ImageUpload({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="aspect-square rounded-lg border-2 border-dashed border-zinc-700 hover:border-cyan-500 flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-cyan-400 transition-colors bg-zinc-800/50"
+            className="aspect-square rounded-lg border-2 border-dashed border-[var(--color-border)] hover:border-[var(--color-primary)] flex flex-col items-center justify-center gap-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-primary-text)] hover:bg-[var(--color-bg-elevated)]/50 transition-colors bg-[var(--color-bg-surface)]/50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {uploading ? (
               <Spinner size="sm" />
             ) : (
               <>
                 <Upload className="w-5 h-5" />
-                <span className="text-xs">Subir</span>
+                <span className="text-xs font-medium">Subir</span>
               </>
             )}
           </button>
@@ -153,6 +147,12 @@ export default function ImageUpload({
         onChange={handleUpload}
         className="hidden"
       />
+      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mt-2">
+        {label || `Imágenes (${images.length}/${max})`}
+      </label>
+      <p className="text-xs text-[var(--color-text-muted)] mt-1">
+        jpg, png, webp, gif — Máx. 10MB
+      </p>
     </div>
   );
 }

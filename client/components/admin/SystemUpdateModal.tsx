@@ -1,9 +1,7 @@
 // @ts-nocheck
 "use client";
 import { useState } from "react";
-import { Button } from "../ui/Form";
-import { Modal } from "../ui/Modal";
-import { Spinner } from "../ui/Spinner";
+import { Button, Modal } from "@/components/ui";
 import { useAlert } from "../../context/AlertContext";
 import api from "@/services/admin-api";
 import { SYSTEM_FIELDS } from "@/utils/excel";

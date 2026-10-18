@@ -1,14 +1,17 @@
 // @ts-nocheck
 "use client";
+
 import { useState, useEffect } from "react";
-import { ArrowLeft, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
-import { Button, Input } from "@/components/ui/Form";
-import { Spinner } from "@/components/ui/Spinner";
+import { Plus, Trash2 } from "lucide-react";
+import { Button, Input, Select, Modal, Spinner } from "@/components/ui";
 import { useUnsavedChanges } from "@/context/UnsavedChangesContext";
 import { useAlert } from "@/context/AlertContext";
 import api from "@/services/admin-api";
-
-const UNIT_LABEL = { kg: "Gr", m: "Cm", l: "Ml" };
+import {
+  UNIT_LABEL,
+  UNIT_OPTIONS,
+  ATTRIBUTE_MESSAGES,
+} from "@/constants/attributes";
 
 export default function Attributes() {
   const Alert = useAlert();
@@ -17,7 +20,7 @@ export default function Attributes() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ name: "", unit_type: null, values: [] });
+  const [form, setForm] = useState({ name: "", unit_type: "", values: [] });
 
   const load = () => {
     setLoading(true);
@@ -34,15 +37,16 @@ export default function Attributes() {
 
   const openNew = () => {
     setEditingId("new");
-    setForm({ name: "", unit_type: null, values: [] });
+    setForm({ name: "", unit_type: "", values: [] });
     setIsDirty(false);
   };
+
   const openEdit = (attr) => {
     setEditingId(attr.id);
     setIsDirty(false);
     setForm({
       name: attr.name || "",
-      unit_type: attr.unitType || null,
+      unit_type: attr.unitType || "",
       values: (attr.values || []).map((v) => ({
         id: v.id,
         value: v.value,
@@ -50,15 +54,21 @@ export default function Attributes() {
       })),
     });
   };
+
   const closeForm = async () => {
-    if (await confirmLeave()) setEditingId(null);
+    if (await confirmLeave()) {
+      setEditingId(null);
+      setIsDirty(false);
+    }
   };
+
   const handleValueChange = (index, value) => {
     const next = [...form.values];
     next[index] = { ...next[index], value };
     setForm({ ...form, values: next });
     setIsDirty(true);
   };
+
   const addValue = () => {
     setForm({
       ...form,
@@ -66,6 +76,7 @@ export default function Attributes() {
     });
     setIsDirty(true);
   };
+
   const removeValue = (index) => {
     setForm({ ...form, values: form.values.filter((_, i) => i !== index) });
     setIsDirty(true);
@@ -74,35 +85,48 @@ export default function Attributes() {
   const handleSave = async () => {
     if (!form.name.trim()) {
       Alert.fire({
-        message: "El nombre del atributo es obligatorio",
+        message: ATTRIBUTE_MESSAGES.NAME_REQUIRED,
         type: "warning",
       });
       return;
     }
+
+    // Filtrar valores vacíos no intencionales
+    const validValues = form.values
+      .filter((v) => String(v.value).trim() !== "")
+      .map((v, idx) => ({
+        ...(v.id && { id: v.id }),
+        value: String(v.value).trim(),
+        sort_order: idx,
+      }));
+
     setSaving(true);
     try {
       const payload = {
-        name: form.name,
-        unit_type: form.unit_type,
+        name: form.name.trim(),
+        unit_type: form.unit_type || null,
         sort_order: 0,
-        values: form.values.map((v) => ({
-          ...(v.id && { id: v.id }),
-          value: v.value,
-          sort_order: v.sort_order || 0,
-        })),
+        values: validValues,
       };
-      if (editingId === "new") await api.post("/admin/attributes", payload);
-      else await api.put(`/admin/attributes/${editingId}`, payload);
+
+      if (editingId === "new") {
+        await api.post("/admin/attributes", payload);
+      } else {
+        await api.put(`/admin/attributes/${editingId}`, payload);
+      }
+
       Alert.fire({
         message:
-          editingId === "new" ? "Atributo creado" : "Atributo actualizado",
+          editingId === "new"
+            ? ATTRIBUTE_MESSAGES.SAVE_SUCCESS_NEW
+            : ATTRIBUTE_MESSAGES.SAVE_SUCCESS_EDIT,
         type: "success",
       });
       setIsDirty(false);
       setEditingId(null);
       load();
     } catch {
-      Alert.fire({ message: "Error al guardar", type: "error" });
+      Alert.fire({ message: ATTRIBUTE_MESSAGES.SAVE_ERROR, type: "error" });
     } finally {
       setSaving(false);
     }
@@ -110,37 +134,46 @@ export default function Attributes() {
 
   const handleDelete = async (attr) => {
     const result = await Alert.fire({
-      title: "¿Eliminar atributo?",
-      message: `¿Eliminar "${attr.name}" y todos sus valores?`,
+      title: ATTRIBUTE_MESSAGES.DELETE_CONFIRM_TITLE,
+      message: `¿Eliminar "${attr.name}" y todos sus valores asociados?`,
       type: "warning",
       variant: "modal",
       showCancelButton: true,
       confirmButtonText: "Eliminar",
       cancelButtonText: "Cancelar",
     });
+
     if (!result.isConfirmed) return;
+
     try {
       await api.delete(`/admin/attributes/${attr.id}`);
-      Alert.fire({ message: "Atributo eliminado", type: "success" });
+      Alert.fire({
+        message: ATTRIBUTE_MESSAGES.DELETE_SUCCESS,
+        type: "success",
+      });
       load();
     } catch {
-      Alert.fire({ message: "Error al eliminar", type: "error" });
+      Alert.fire({ message: ATTRIBUTE_MESSAGES.DELETE_ERROR, type: "error" });
     }
   };
 
-  if (loading)
+  if (loading) {
     return (
       <div className="flex items-center justify-center py-32">
-        <Spinner />
+        <Spinner size="lg" />
       </div>
     );
+  }
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="max-w-7xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-100">Atributos</h1>
-          <p className="text-sm text-zinc-500 mt-1">
+          <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
+            Atributos
+          </h1>
+          <p className="text-sm text-[var(--color-text-secondary)] mt-1">
             Gestioná tamaños, colores, cantidades y otras variantes de productos
           </p>
         </div>
@@ -149,27 +182,31 @@ export default function Attributes() {
         </Button>
       </div>
 
+      {/* Lista de atributos */}
       <div className="space-y-3">
         {attributes.map((attr) => (
           <div
             key={attr.id}
-            className="rounded-xl border border-zinc-700 bg-zinc-900/50 overflow-hidden"
+            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-5 transition-colors shadow-xs"
           >
-            <div className="flex items-center gap-3 px-5 py-4">
+            <div className="flex items-start sm:items-center justify-between gap-4">
               <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-zinc-100">
-                  {attr.name}{" "}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-semibold text-base text-[var(--color-text-primary)]">
+                    {attr.name}
+                  </h3>
                   {attr.unitType && (
-                    <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 ml-2">
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-primary-light)] text-[var(--color-primary-text)] border border-[var(--color-primary)]/20">
                       por {UNIT_LABEL[attr.unitType] || attr.unitType}
                     </span>
                   )}
-                </h3>
-                <div className="flex flex-wrap gap-1.5 mt-2">
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 mt-3">
                   {(attr.values || []).map((v) => (
                     <span
                       key={v.id}
-                      className="text-xs px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700"
+                      className="text-xs font-medium px-2.5 py-1 rounded-full bg-[var(--color-bg-elevated)] text-[var(--color-text-secondary)] border border-[var(--color-border)]"
                     >
                       {v.value}
                       {attr.unitType
@@ -177,99 +214,115 @@ export default function Attributes() {
                         : ""}
                     </span>
                   ))}
+                  {(!attr.values || attr.values.length === 0) && (
+                    <span className="text-xs text-[var(--color-text-muted)] italic">
+                      Sin valores asignados
+                    </span>
+                  )}
                 </div>
               </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => openEdit(attr)}
-              >
-                Editar
-              </Button>
-              <button
-                onClick={() => handleDelete(attr)}
-                className="p-2 text-zinc-500 hover:text-red-400 rounded-lg hover:bg-zinc-800 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => openEdit(attr)}
+                >
+                  Editar
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(attr)}
+                  className="p-2 text-[var(--color-text-muted)] hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                  title="Eliminar atributo"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         ))}
+
         {attributes.length === 0 && (
-          <div className="text-center py-16 rounded-xl border border-dashed border-zinc-700">
-            <p className="text-zinc-500">No hay atributos creados</p>
-            <p className="text-xs text-zinc-600 mt-1">
+          <div className="text-center py-16 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg-surface)]/30">
+            <p className="font-medium text-[var(--color-text-primary)]">
+              No hay atributos creados
+            </p>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1 max-w-sm mx-auto">
               Creá atributos como "Color" o "Tamaño" para usar en productos y
-              servicios
+              servicios.
             </p>
           </div>
         )}
       </div>
 
-      {editingId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60" onClick={closeForm} />
-          <div className="relative bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-md p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-            <h2 className="text-lg font-bold text-zinc-100">
-              {editingId === "new" ? "Nuevo atributo" : "Editar atributo"}
-            </h2>
-            <Input
-              label="Nombre del atributo"
-              value={form.name}
+      {/* Modal de Creación / Edición */}
+      <Modal
+        open={Boolean(editingId)}
+        onClose={closeForm}
+        title={editingId === "new" ? "Nuevo atributo" : "Editar atributo"}
+      >
+        <div className="space-y-4">
+          <Input
+            label="Nombre del atributo"
+            value={form.name}
+            onChange={(e) => {
+              setForm({ ...form, name: e.target.value });
+              setIsDirty(true);
+            }}
+            placeholder="Color, Tamaño, Cantidad..."
+            required
+            autoFocus
+          />
+
+          <div>
+            <Select
+              label="Tipo de unidad (opcional)"
+              value={form.unit_type}
+              options={UNIT_OPTIONS}
               onChange={(e) => {
-                setForm({ ...form, name: e.target.value });
+                setForm({ ...form, unit_type: e.target.value });
                 setIsDirty(true);
               }}
-              placeholder="Color, Tamaño, Cantidad..."
             />
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-1.5">
-                Tipo de unidad (opcional)
-              </label>
-              <select
-                value={form.unit_type || ""}
-                onChange={(e) => {
-                  setForm({ ...form, unit_type: e.target.value || null });
-                  setIsDirty(true);
-                }}
-                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm focus:outline-none focus:border-cyan-500"
+            {form.unit_type && (
+              <p className="text-xs text-[var(--color-text-muted)] mt-1.5 leading-relaxed">
+                Los valores deben ser números (ej: 100, 250, 500). Se usarán
+                para calcular el precio proporcionalmente.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-[var(--color-text-secondary)]">
+                Valores
+              </span>
+              <button
+                type="button"
+                onClick={addValue}
+                className="flex items-center gap-1 text-xs font-semibold text-[var(--color-primary-text)] hover:opacity-80 transition-opacity cursor-pointer"
               >
-                <option value="">Ninguna (texto libre)</option>
-                <option value="kg">Gramo (Gr)</option>
-                <option value="m">Centímetro (Cm)</option>
-                <option value="l">Mililitro (Ml)</option>
-              </select>
-              {form.unit_type && (
-                <p className="text-xs text-zinc-500 mt-1">
-                  Los valores deben ser números (ej: 100, 250, 500). Se usarán
-                  para calcular el precio proporcionalmente.
-                </p>
-              )}
+                <Plus className="w-3.5 h-3.5" /> Agregar valor
+              </button>
             </div>
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-zinc-400">
-                  Valores
-                </span>
-                <button
-                  type="button"
-                  onClick={addValue}
-                  className="flex items-center gap-1 text-xs font-medium text-cyan-400 hover:text-cyan-300"
-                >
-                  <Plus className="w-3 h-3" /> Agregar valor
-                </button>
-              </div>
-              {form.values.length === 0 ? (
-                <p className="text-xs text-zinc-600 italic">
+
+            {form.values.length === 0 ? (
+              <div className="p-4 rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-bg-surface)]/50 text-center">
+                <p className="text-xs text-[var(--color-text-muted)] italic">
                   {form.unit_type
-                    ? "Ej: 100, 250, 500, 1000..."
-                    : "Ej: Rojo, Azul, Verde..."}
+                    ? "Sin valores definidos. Ej: 100, 250, 500..."
+                    : "Sin valores definidos. Ej: Rojo, Azul, Verde..."}
                 </p>
-              ) : (
-                <div className="space-y-2">
-                  {form.values.map((v, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="text-xs text-zinc-600 w-5">{i + 1}</span>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {form.values.map((v, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-[var(--color-text-muted)] w-5 text-center shrink-0">
+                      {i + 1}
+                    </span>
+                    <div className="relative flex-1">
                       <input
                         type={form.unit_type ? "number" : "text"}
                         inputMode={form.unit_type ? "numeric" : "text"}
@@ -277,35 +330,38 @@ export default function Attributes() {
                         value={v.value}
                         onChange={(e) => handleValueChange(i, e.target.value)}
                         placeholder={form.unit_type ? "Ej: 250" : "Valor"}
-                        className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm focus:outline-none focus:border-cyan-500"
+                        className="w-full px-3 py-1.5 bg-[var(--color-bg-base)] border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-colors"
                       />
-                      {form.unit_type && (
-                        <span className="text-xs text-zinc-500 shrink-0">
-                          {UNIT_LABEL[form.unit_type] || form.unit_type}
-                        </span>
-                      )}
-                      <button
-                        onClick={() => removeValue(i)}
-                        className="p-1.5 text-zinc-600 hover:text-red-400"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="flex gap-3 justify-end pt-2">
-              <Button variant="secondary" onClick={closeForm}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? "Guardando..." : "Guardar"}
-              </Button>
-            </div>
+                    {form.unit_type && (
+                      <span className="text-xs font-medium text-[var(--color-text-muted)] shrink-0 min-w-[28px]">
+                        {UNIT_LABEL[form.unit_type] || form.unit_type}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeValue(i)}
+                      className="p-1.5 text-[var(--color-text-muted)] hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
+                      title="Eliminar valor"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-3 justify-end pt-3 border-t border-[var(--color-border)]">
+            <Button variant="secondary" onClick={closeForm}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? "Guardando..." : "Guardar"}
+            </Button>
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

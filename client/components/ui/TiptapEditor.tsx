@@ -5,23 +5,17 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import CharacterCount from "@tiptap/extension-character-count";
-import {
-  Bold,
-  Italic,
-  List,
-  ListOrdered,
-  Heading2,
-} from "lucide-react";
+import { Bold, Italic, List, ListOrdered, Heading2 } from "lucide-react";
 
 const ToolbarButton = ({ onClick, isActive, children, title }) => (
   <button
     type="button"
     onClick={onClick}
     title={title}
-    className={`p-1.5 rounded transition-colors ${
+    className={`p-1.5 rounded-md transition-colors ${
       isActive
-        ? "bg-cyan-500/20 text-cyan-400"
-        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700"
+        ? "bg-[var(--color-primary-light)] text-[var(--color-primary-text)] font-semibold"
+        : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)]"
     }`}
   >
     {children}
@@ -54,14 +48,15 @@ export default function TiptapEditor({
     },
     editorProps: {
       attributes: {
-        class: "focus:outline-none min-h-[100px] px-3 py-2 text-sm text-zinc-200",
+        class:
+          "focus:outline-none min-h-[100px] px-3 py-2 text-sm text-[var(--color-text-primary)]",
       },
     },
   });
 
   useEffect(() => {
     if (editor && value !== editor.getHTML()) {
-      editor.commands.setContent(value || '');
+      editor.commands.setContent(value || "");
     }
   }, [value, editor]);
 
@@ -74,15 +69,18 @@ export default function TiptapEditor({
   return (
     <div>
       {label && (
-        <label className="block text-sm font-medium text-zinc-400 mb-1.5">
+        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
           {label}
         </label>
       )}
 
-      <div className="rounded-lg border border-zinc-700 bg-zinc-800 overflow-hidden focus-within:border-cyan-500 focus-within:ring-1 focus-within:ring-cyan-500 transition-colors">
-        <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-zinc-700 bg-zinc-800/50">
+      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-base)] overflow-hidden focus-within:border-[var(--color-primary)] focus-within:ring-1 focus-within:ring-[var(--color-primary)] transition-colors">
+        {/* Barra de herramientas */}
+        <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-surface)]">
           <ToolbarButton
-            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+            onClick={() =>
+              editor.chain().focus().toggleHeading({ level: 2 }).run()
+            }
             isActive={editor.isActive("heading", { level: 2 })}
             title="Subtítulo (H2)"
           >
@@ -118,20 +116,22 @@ export default function TiptapEditor({
           </ToolbarButton>
         </div>
 
+        {/* Área de edición */}
         <EditorContent editor={editor} className="tiptap-editor" />
       </div>
 
-      <div className="flex items-center justify-between mt-1">
-        <p className="text-xs text-zinc-600">
+      {/* Info y contador de caracteres */}
+      <div className="flex items-center justify-between mt-1 px-1">
+        <p className="text-xs text-[var(--color-text-muted)]">
           Seleccioná texto y usá los botones para formatear
         </p>
         <p
-          className={`text-xs ${
+          className={`text-xs font-medium ${
             overLimit
-              ? "text-red-400"
+              ? "text-red-500 dark:text-red-400"
               : nearLimit
-                ? "text-yellow-400"
-                : "text-zinc-500"
+                ? "text-amber-500 dark:text-amber-400"
+                : "text-[var(--color-text-muted)]"
           }`}
         >
           {charCount.toLocaleString()} / {maxLength.toLocaleString()}

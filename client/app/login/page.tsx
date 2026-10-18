@@ -2,11 +2,10 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
 import { Eye, EyeOff, PieChart } from "lucide-react";
-import { useAuth } from "@/context/AuthContext";
-import { Button } from "@/components/ui/Form";
-import { Spinner } from "@/components/ui/Spinner";
+import { Button, Spinner } from "@/components/ui";
 
 export default function Login() {
   const [email, setEmail] = useState("");

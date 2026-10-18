@@ -5,8 +5,7 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { Spinner } from "@/components/ui/Spinner";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner, Skeleton } from "@/components/ui";
 
 const Sidebar = dynamic(() => import("@/components/admin/Sidebar"), {
   ssr: false,
@@ -48,8 +47,8 @@ export default function AdminShell({
 
   if (loading)
     return (
-      <div className="min-h-screen bg-zinc-950 flex">
-        <Skeleton className="w-64 h-screen rounded-none hidden lg:block" />
+      <div className="min-h-screen bg-[var(--color-bg-base)] flex">
+        <Skeleton className="w-64 h-screen rounded-none hidden lg:block border-r border-[var(--color-border)]" />
         <div className="flex-1 flex items-center justify-center">
           <Spinner />
         </div>
@@ -61,10 +60,10 @@ export default function AdminShell({
   if (isPublic) return <>{children}</>;
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className="min-h-screen bg-[var(--color-bg-base)] text-[var(--color-text-primary)] transition-colors">
       <Topbar onMenuOpen={() => setSidebarOpen(true)} />
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <main className="ml-0 lg:ml-64 p-4 pt-20 lg:p-6 lg:pt-20 min-h-screen">
+      <main className="ml-0 lg:ml-64 p-4 pt-20 lg:p-6 lg:pt-20 min-h-[calc(100vh-5rem)]">
         {children}
       </main>
     </div>

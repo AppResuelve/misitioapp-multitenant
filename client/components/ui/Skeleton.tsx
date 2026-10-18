@@ -1,14 +1,14 @@
-'use client'
+"use client";
 
 interface SkeletonProps {
-  className?: string
+  className?: string;
 }
 
-export function Skeleton({ className = '' }: SkeletonProps) {
+export function Skeleton({ className = "" }: SkeletonProps) {
   return (
     <div
-      className={`animate-pulse bg-zinc-800 rounded ${className}`}
+      className={`animate-pulse bg-[var(--color-bg-elevated)] rounded-md ${className}`}
       aria-hidden="true"
     />
-  )
+  );
 }

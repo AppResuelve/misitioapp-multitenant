@@ -3,9 +3,7 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { FileSpreadsheet, AlertTriangle, Download } from "lucide-react";
-import { Button } from "../ui/Form";
-import { Modal } from "../ui/Modal";
-import { Spinner } from "../ui/Spinner";
+import { Button, Modal, Spinner } from "@/components/ui";
 import { LoadingOverlay } from "../ui/LoadingOverlay";
 import { useAlert } from "../../context/AlertContext";
 import api from "@/services/admin-api";

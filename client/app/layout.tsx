@@ -1,32 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Lobster, Source_Sans_3, Bebas_Neue, DM_Sans } from "next/font/google";
+import { DM_Sans } from "next/font/google";
 import "./globals.css";
 import { baseMetadata, baseViewport } from "@/data/metadata";
 import { AlertProvider } from "@/context/AlertContext";
 import { UnsavedChangesProvider } from "@/context/UnsavedChangesContext";
 import { AuthProvider } from "@/context/AuthContext";
 import AdminShell from "@/components/admin/AdminShell";
-
-const bebasNeue = Bebas_Neue({
-  subsets: ["latin"],
-  weight: ["400"],
-  variable: "--font-heading",
-  display: "swap",
-});
-
-const lobster = Lobster({
-  subsets: ["latin"],
-  weight: ["400"],
-  variable: "--font-logo",
-  display: "swap",
-});
-
-const sourceSans = Source_Sans_3({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-body",
-  display: "swap",
-});
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -48,9 +27,24 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`h-full antialiased ${bebasNeue.variable} ${lobster.variable} ${sourceSans.variable} ${dmSans.variable}`}
+      suppressHydrationWarning
+      className={`h-full antialiased ${dmSans.variable}`}
       data-scroll-behavior="smooth"
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                const t = localStorage.getItem('theme');
+                const dark = t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                if (dark) document.documentElement.classList.add('dark');
+                else document.documentElement.classList.add('light');
+              } catch (_) {}
+            `,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">
         <div className="admin-root">
           <AlertProvider>

@@ -1,9 +1,12 @@
 // @ts-nocheck
-'use client'
-export function Card({ children, className = '' }) {
+"use client";
+
+export function Card({ children, className = "" }) {
   return (
-    <div className={`bg-zinc-900 border border-zinc-800 rounded-xl p-6 ${className}`}>
+    <div
+      className={`bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-6 transition-colors shadow-xs ${className}`}
+    >
       {children}
     </div>
-  )
+  );
 }

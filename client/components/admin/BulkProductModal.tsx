@@ -8,9 +8,7 @@ import {
   ChevronDown,
   Download,
 } from "lucide-react";
-import { Button } from "@/components/ui/Form";
-import { Modal } from "@/components/ui/Modal";
-import { Spinner } from "@/components/ui/Spinner";
+import { Button, Modal, Spinner } from "@/components/ui";
 import { LoadingOverlay } from "@/components/ui/LoadingOverlay";
 import { useAlert } from "@/context/AlertContext";
 import api from "@/services/admin-api";

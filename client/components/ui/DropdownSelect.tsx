@@ -1,20 +1,20 @@
-'use client'
-import { useState, useEffect, useRef } from 'react'
-import { ChevronDown } from 'lucide-react'
+"use client";
+import { useState, useEffect, useRef } from "react";
+import { ChevronDown } from "lucide-react";
 
 interface DropdownOption {
-  value: string | number
-  label: string
+  value: string | number;
+  label: string;
 }
 
 interface DropdownSelectProps {
-  label?: string
-  options: DropdownOption[]
-  value: string | number
-  onChange: (value: string | number) => void
-  placeholder?: string
-  className?: string
-  disabled?: boolean
+  label?: string;
+  options: DropdownOption[];
+  value: string | number;
+  onChange: (value: string | number) => void;
+  placeholder?: string;
+  className?: string;
+  disabled?: boolean;
 }
 
 export function DropdownSelect({
@@ -22,29 +22,32 @@ export function DropdownSelect({
   options,
   value,
   onChange,
-  placeholder = 'Seleccionar...',
-  className = '',
+  placeholder = "Seleccionar...",
+  className = "",
   disabled = false,
 }: DropdownSelectProps) {
-  const [open, setOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false)
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
       }
-    }
-    if (open) document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
+    };
+    if (open) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
 
-  const selected = options.find(o => String(o.value) === String(value))
+  const selected = options.find((o) => String(o.value) === String(value));
 
   return (
     <div className={className} ref={containerRef}>
       {label && (
-        <label className="block text-sm font-medium text-zinc-400 mb-1.5">
+        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
           {label}
         </label>
       )}
@@ -53,46 +56,62 @@ export function DropdownSelect({
           type="button"
           onClick={() => !disabled && setOpen(!open)}
           disabled={disabled}
-          className={`w-full flex items-center justify-between px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm transition-colors
-            ${disabled
-              ? 'opacity-50 cursor-not-allowed text-zinc-500'
-              : 'text-zinc-200 hover:border-zinc-600 cursor-pointer'
+          className={`w-full flex items-center justify-between px-3 py-2 bg-[var(--color-bg-base)] border rounded-lg text-sm transition-colors
+            ${
+              disabled
+                ? "opacity-50 cursor-not-allowed text-[var(--color-text-muted)] border-[var(--color-border)]"
+                : "text-[var(--color-text-primary)] border-[var(--color-border)] hover:border-[var(--color-border-hover)] cursor-pointer"
             }
-            ${open ? 'border-cyan-500 ring-1 ring-cyan-500' : ''}
+            ${open ? "border-[var(--color-primary)] ring-1 ring-[var(--color-primary)]" : ""}
           `}
         >
-          <span className={selected ? 'text-zinc-200' : 'text-zinc-500'}>
+          <span
+            className={
+              selected
+                ? "text-[var(--color-text-primary)]"
+                : "text-[var(--color-text-muted)]"
+            }
+          >
             {selected ? selected.label : placeholder}
           </span>
-          <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+          <ChevronDown
+            className={`w-4 h-4 text-[var(--color-text-secondary)] transition-transform duration-200 ${
+              open ? "rotate-180" : ""
+            }`}
+          />
         </button>
 
         {open && (
-          <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-30 max-h-60 overflow-y-auto">
+          <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg shadow-xl z-30 max-h-60 overflow-y-auto py-1">
             {options.length === 0 ? (
-              <div className="px-3 py-4 text-xs text-zinc-500 text-center">
+              <div className="px-3 py-4 text-xs text-[var(--color-text-muted)] text-center">
                 Sin opciones
               </div>
             ) : (
-              options.map(opt => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => { onChange(opt.value); setOpen(false) }}
-                  className={`w-full text-left px-3 py-2 text-sm transition-colors
-                    ${String(opt.value) === String(value)
-                      ? 'bg-cyan-500/10 text-cyan-400'
-                      : 'text-zinc-300 hover:bg-zinc-700'
-                    }
-                  `}
-                >
-                  {opt.label}
-                </button>
-              ))
+              options.map((opt) => {
+                const isSelected = String(opt.value) === String(value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      onChange(opt.value);
+                      setOpen(false);
+                    }}
+                    className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                      isSelected
+                        ? "bg-[var(--color-primary-light)] text-[var(--color-primary-text)] font-semibold"
+                        : "text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)]"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })
             )}
           </div>
         )}
       </div>
     </div>
-  )
+  );
 }
