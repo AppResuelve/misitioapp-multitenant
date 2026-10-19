@@ -1,9 +1,9 @@
 {
   "name": "misitioapp-api",
+  "version": "1.0.0",
   "private": true,
   "engines": {
-    "node": ">=20.0.0 <21.0.0",
-    "pnpm": ">=9.0.0 <10.0.0"
+    "node": "20.x"
   },
   "packageManager": "pnpm@9.15.4",
   "scripts": {
