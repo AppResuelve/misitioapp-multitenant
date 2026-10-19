@@ -1,6 +1,6 @@
 // src/modules/emails/services/email.sender.js
 const brevo = require("../config/brevo");
-const { Tenant, Setting, EmailLog } = require("../../../models");
+const { Tenant, StoreSetting, EmailLog } = require("../../../models");
 const { getSubject } = require("../utils/dinamicTexts");
 
 // Importamos los templates necesarios
@@ -20,7 +20,7 @@ const TEMPLATES = {
 
 const DEFAULTS = {
   appName: "AppResuelve",
-  supportEmail: process.env.SUPPORT_EMAIL || "soporte@appresuelve.com.ar",
+  supportEmail: "soporte@appresuelve.com.ar",
   senderEmail: process.env.BREVO_SENDER_EMAIL || "no-reply@appresuelve.com.ar",
   primaryColor: "#06b6d4",
 };
@@ -40,16 +40,12 @@ const sendEmail = async ({
 
     if (tenantId && branding === "tenant") {
       const tenant = await Tenant.findByPk(tenantId);
-      const settings = await Setting.findAll({ where: { tenantId } });
-      const configMap = settings.reduce((acc, row) => {
-        acc[row.key] = row.value;
-        return acc;
-      }, {});
+      const settings = await StoreSetting.findOne({ where: { tenantId } });
 
-      storeName = configMap.business_name || tenant?.name || DEFAULTS.appName;
-      supportEmail = configMap.support_email || DEFAULTS.supportEmail;
-      logoNav = configMap.store_logo || null;
-      primaryColor = configMap.primary_color || DEFAULTS.primaryColor;
+      storeName = settings?.businessName || tenant?.name || DEFAULTS.appName;
+      supportEmail = settings?.email || DEFAULTS.supportEmail;
+      logoNav = settings?.logoUrl || null;
+      primaryColor = DEFAULTS.primaryColor;
     }
 
     const templateFn = TEMPLATES[type];

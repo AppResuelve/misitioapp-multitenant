@@ -1,39 +1,50 @@
-const { Setting } = require("../../models");
+const { StoreSetting } = require("../../models");
 
-const DEFAULTS = [
-  { key: "store_status", value: "active" },
-  { key: "whatsapp_number", value: "" },
-  { key: "business_name", value: "" },
-  { key: "business_slogan", value: "" },
-  { key: "business_description", value: "" },
-  { key: "logo_url", value: "/logotipo.png" },
-  { key: "favicon_url", value: "/logotipo.png" },
-  { key: "email", value: "" },
-  { key: "address", value: "" },
-  { key: "business_hours", value: [] },
-  { key: "instagram", value: "" },
-  { key: "facebook", value: "" },
-  { key: "tiktok", value: "" },
-  { key: "youtube", value: "" },
-  { key: "monthly_changes_limit", value: 2 },
-  { key: "changes_this_month", value: 0 },
-];
-
-const ensureDefaults = async (tenantId) => {
-  for (const { key, value } of DEFAULTS) {
-    const where = { key, tenantId };
-    const defaults = { key, value, tenantId };
-    await Setting.findOrCreate({ where, defaults });
-  }
+const DEFAULTS = {
+  storeStatus: "active",
+  businessName: "",
+  businessSlogan: "",
+  businessDescription: "",
+  logoUrl: "/logotipo.png",
+  faviconUrl: "/logotipo.png",
+  socialLinks: {
+    instagram: "",
+    facebook: "",
+    tiktok: "",
+    youtube: "",
+  },
 };
 
-const getSettings = async (tenantId) => {
-  const rows = await Setting.findAll({ where: { tenantId } });
-  const settings = {};
-  rows.forEach((row) => {
-    settings[row.key] = row.value;
+/**
+ * Garantiza que exista la fila de StoreSetting para el tenant con valores iniciales
+ */
+const ensureDefaults = async (tenantId) => {
+  if (!tenantId) return null;
+
+  const [settings] = await StoreSetting.findOrCreate({
+    where: { tenantId },
+    defaults: {
+      tenantId,
+      ...DEFAULTS,
+    },
   });
+
   return settings;
 };
 
-module.exports = { ensureDefaults, getSettings };
+/**
+ * Obtiene el registro de configuración del tenant en formato plano
+ */
+const getSettings = async (tenantId) => {
+  if (!tenantId) return {};
+
+  let settings = await StoreSetting.findOne({ where: { tenantId } });
+
+  if (!settings) {
+    settings = await ensureDefaults(tenantId);
+  }
+
+  return settings ? settings.toJSON() : {};
+};
+
+module.exports = { ensureDefaults, getSettings, DEFAULTS };

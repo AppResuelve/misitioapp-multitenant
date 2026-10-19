@@ -1,4 +1,4 @@
-const { Setting, Billing } = require("../models");
+const { StoreSetting, Billing } = require("../models");
 
 const storeStatus = async (req, res, next) => {
   try {
@@ -25,7 +25,7 @@ const storeStatus = async (req, res, next) => {
     }
 
     // 2. Chequeo de Estado Operativo de la Tienda (Draft, Maintenance, etc.)
-    const row = await Setting.findOne({
+    const row = await StoreSetting.findOne({
       where: { tenantId, key: "store_status" },
     });
     const status = row?.value || "active";

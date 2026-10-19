@@ -2,7 +2,7 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { Op } = require("sequelize");
-const { User, Setting, Billing } = require("../models");
+const { User, StoreSetting, Billing } = require("../models");
 const emailService = require("./admin/email.service");
 const { adminOriginFromTenant } = require("../utils/adminOrigin");
 
@@ -38,11 +38,12 @@ const getBillingInfo = async (tenantId) => {
 };
 
 const getBusinessName = async (tenantId) => {
-  const where = tenantId
-    ? { key: "business_name", tenantId }
-    : { key: "business_name" };
-  const row = await Setting.findOne({ where });
-  return row?.value || "";
+  if (!tenantId) return "";
+  const storeSetting = await StoreSetting.findOne({
+    where: { tenantId },
+    attributes: ["businessName"], // o "business_name" según tu mapeo en el modelo
+  });
+  return storeSetting?.businessName || storeSetting?.business_name || "";
 };
 
 const generateToken = (user) => {

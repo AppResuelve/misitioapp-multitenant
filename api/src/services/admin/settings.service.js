@@ -1,67 +1,69 @@
-const { Setting, sequelize } = require('../../models')
-const { QueryTypes } = require('sequelize')
+const { StoreSetting } = require("../../models");
 
+/**
+ * Obtiene la configuración completa de la tienda del tenant.
+ */
 const getAll = async (tenantId) => {
-  const rows = await Setting.findAll({ where: { tenantId } })
-  const settings = {}
-  rows.forEach((row) => {
-    settings[row.key] = row.value
-  })
-  return settings
-}
+  const storeSetting = await StoreSetting.findOne({
+    where: { tenantId },
+  });
 
+  return storeSetting ? storeSetting.toJSON() : null;
+};
+
+/**
+ * Obtiene un campo específico de la configuración.
+ */
 const get = async (tenantId, key) => {
-  const setting = await Setting.findOne({ where: { tenantId, key } })
-  return setting ? setting.value : null
-}
+  const storeSetting = await StoreSetting.findOne({
+    where: { tenantId },
+  });
 
-// 1 consulta: INSERT ... ON CONFLICT (tenant_id, key)
-const upsertSetting = async (tenantId, key, value) => {
-  await sequelize.query(
-    `INSERT INTO settings (tenant_id, key, value, created_at, updated_at)
-     VALUES (:tenantId, :key, :value::jsonb, NOW(), NOW())
-     ON CONFLICT (tenant_id, key)
-     DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
-    {
-      replacements: {
-        tenantId,
-        key,
-        value: value === null || value === undefined ? null : JSON.stringify(value),
-      },
-      type: QueryTypes.INSERT,
-    }
-  )
-}
+  if (!storeSetting) return null;
 
+  // Permite acceder tanto en camelCase como en snake_case
+  return storeSetting[key] ?? storeSetting.getDataValue?.(key) ?? null;
+};
+
+/**
+ * Actualiza un único campo o propiedad.
+ */
 const set = async (tenantId, key, value) => {
-  await upsertSetting(tenantId, key, value)
-  return { tenantId, key, value }
-}
+  return setBulk(tenantId, { [key]: value });
+};
 
-// 1 sola consulta para N settings
+/**
+ * Actualiza múltiples campos de la configuración de la tienda en 1 sola consulta.
+ * Hace upsert sobre la fila del tenant.
+ */
 const setBulk = async (tenantId, data) => {
-  const entries = Object.entries(data)
-  if (entries.length === 0) return getAll(tenantId)
+  if (!data || Object.keys(data).length === 0) {
+    return getAll(tenantId);
+  }
 
-  const values = entries
-    .map((_, i) => `(:tenantId, :key${i}, :value${i}::jsonb, NOW(), NOW())`)
-    .join(', ')
+  // Buscamos o creamos la fila del tenant
+  const [storeSetting] = await StoreSetting.findOrCreate({
+    where: { tenantId },
+    defaults: { tenantId, ...data },
+  });
 
-  const replacements = { tenantId }
-  entries.forEach(([key, value], i) => {
-    replacements[`key${i}`] = key
-    replacements[`value${i}`] = value === null || value === undefined ? null : JSON.stringify(value)
-  })
+  // Si ya existía, actualizamos únicamente los campos enviados
+  await storeSetting.update(data);
 
-  await sequelize.query(
-    `INSERT INTO settings (tenant_id, key, value, created_at, updated_at)
-     VALUES ${values}
-     ON CONFLICT (tenant_id, key)
-     DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
-    { replacements, type: QueryTypes.INSERT }
-  )
+  return storeSetting.toJSON();
+};
 
-  return getAll(tenantId)
-}
+/**
+ * Alias de compatibilidad por si algún controlador aún invoca upsertSetting.
+ */
+const upsertSetting = async (tenantId, key, value) => {
+  return set(tenantId, key, value);
+};
 
-module.exports = { getAll, get, set, setBulk, upsertSetting }
+module.exports = {
+  getAll,
+  get,
+  set,
+  setBulk,
+  upsertSetting,
+};

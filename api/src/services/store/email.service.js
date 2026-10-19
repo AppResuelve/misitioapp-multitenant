@@ -1,15 +1,22 @@
 const { sendEmail, TYPES } = require("../../modules/emails");
-const { Setting } = require("../../models");
+const { StoreSetting } = require("../../models");
 
 /**
  * Helper para resolver el email de soporte/recepción configurado por el comercio
  */
 const getStoreContactEmail = async (tenantId) => {
   if (!tenantId) return null;
-  const row = await Setting.findOne({
-    where: { tenantId, key: "support_email" },
+
+  const storeSetting = await StoreSetting.findOne({
+    where: { tenantId },
+    attributes: ["supportEmail"], // o 'support_email' según la definición de tu modelo
   });
-  return row?.value || null;
+
+  return (
+    storeSetting?.supportEmail ||
+    storeSetting?.getDataValue?.("support_email") ||
+    null
+  );
 };
 
 /**
