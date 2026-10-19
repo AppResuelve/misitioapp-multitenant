@@ -7,7 +7,6 @@ const morgan = require("morgan");
 const mountRoutes = require("./routes");
 const errorHandler = require("./middleware/errorHandler");
 const timeout = require("./middleware/timeout");
-const { sequelize } = require("./models");
 
 const app = express();
 

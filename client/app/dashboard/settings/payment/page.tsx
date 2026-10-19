@@ -251,7 +251,7 @@ export default function PaymentMethodsPage() {
     PAYMENT_CHANNEL_PRESETS[formData.type] || PAYMENT_CHANNEL_PRESETS.credit;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

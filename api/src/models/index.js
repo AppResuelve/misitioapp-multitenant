@@ -47,6 +47,8 @@ const models = {
     sequelize,
     require("sequelize").DataTypes,
   ),
+  Billing: require("./Billing")(sequelize, require("sequelize").DataTypes),
+  EmailLog: require("./EmailLog")(sequelize, require("sequelize").DataTypes),
 };
 
 // Modelos que pertenecen a un tenant (todos menos Tenant)
@@ -71,6 +73,8 @@ const TENANTED_MODELS = [
   "PaymentMethod",
   "Campaign",
   "SiteContent",
+  "Billing",
+  "EmailLog",
 ];
 
 Object.keys(models).forEach((modelName) => {

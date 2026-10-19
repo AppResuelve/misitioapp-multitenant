@@ -1,6 +1,8 @@
+const cron = require("node-cron");
 const app = require("./app");
 const { sequelize } = require("./models");
 const { validateEnv } = require("./config/env.schema");
+const { runBillingCron } = require("./cron/billingCron");
 
 const PORT = process.env.PORT || 3001;
 
@@ -15,7 +17,19 @@ const start = async () => {
       console.log(`Servidor corriendo en puerto ${PORT}`);
     });
 
+    // Programar el control nocturno de facturación a las 03:00 AM
+    const billingTask = cron.schedule("0 3 * * *", async () => {
+      console.log("[cron] Iniciando control de facturación diario...");
+      try {
+        await runBillingCron();
+      } catch (err) {
+        console.error("[cron] Error ejecutando runBillingCron:", err);
+      }
+    });
+
     const shutdown = async (signal) => {
+      console.log(`Recibida señal ${signal}, cerrando servidor...`);
+      if (billingTask) billingTask.stop();
       server.close(() => {});
       try {
         await sequelize.close();

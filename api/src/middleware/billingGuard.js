@@ -1,22 +1,37 @@
-const { getStatus } = require('../services/billing.service')
+const { Billing } = require("../models");
 
-// Bloquea el acceso al admin cuando la tienda está suspendida por falta de pago.
-// El super_admin (role 'super_admin') queda exento.
 const billingGuard = async (req, res, next) => {
-  if (req.user?.role === 'super_admin') {
-    return next()
+  // 1. Super admin exento
+  if (req.user?.role === "super_admin") {
+    return next();
+  }
+
+  // 2. EXCEPCIÓN: Permitir siempre consultar y ver la pantalla de facturación
+  // req.baseUrl o req.path para contemplar /api/admin/billing
+  if (req.originalUrl && req.originalUrl.startsWith("/api/admin/billing")) {
+    return next();
   }
 
   try {
-    const status = await getStatus(req.tenant?.id)
-    if (status === 'suspended') {
-      return res.status(403).json({ error: 'store_suspended', message: 'Tienda suspendida por falta de pago.' })
+    const tenantId = req.user?.tenantId || req.tenant?.id;
+    if (!tenantId) return next();
+
+    const billing = await Billing.findOne({
+      where: { tenantId },
+      attributes: ["status"],
+    });
+
+    if (billing?.status === "suspended") {
+      return res.status(403).json({
+        error: "store_suspended",
+        message: "Tienda suspendida por falta de pago.",
+      });
     }
-  } catch {
-    // ante fallo de lectura, no bloquear
+  } catch (err) {
+    // Ante fallo de lectura de DB no bloqueamos
   }
 
-  next()
-}
+  next();
+};
 
-module.exports = billingGuard
+module.exports = billingGuard;

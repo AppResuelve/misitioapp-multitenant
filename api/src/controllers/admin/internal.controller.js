@@ -1,179 +1,243 @@
-const crypto = require('crypto')
-const { User, Setting, Product, Service, Tenant } = require('../../models')
-const emailService = require('../../services/email.service')
-const { ensureDefaults } = require('../../services/store/settings.service')
-const { getStatus, setStatus } = require('../../services/billing.service')
-const { adminOriginFromTenant } = require('../../utils/adminOrigin')
+const {
+  User,
+  Setting,
+  Product,
+  Service,
+  Tenant,
+  Billing,
+  sequelize,
+} = require("../../models");
+const emailService = require("../../services/email.service");
+const billingService = require("../../services/billing.service");
+const { ensureDefaults } = require("../../services/store/settings.service");
+const { adminOriginFromTenant } = require("../../utils/adminOrigin");
+const crypto = require("crypto");
 
 const seedSettings = async (req, res, next) => {
   try {
-    const data = req.body
-    const tenantId = req.tenant.id
+    const data = req.body;
+    const tenantId = req.tenant.id;
 
     const mappings = {
-      businessName: 'business_name',
-      description: 'business_description',
-      whatsappNumber: 'whatsapp_number',
-      logoUrl: 'logo_url',
-      faviconUrl: 'favicon_url',
-      storeStatus: 'store_status',
-      instagram: 'instagram',
-      facebook: 'facebook',
-      tiktok: 'tiktok',
-      youtube: 'youtube',
-    }
+      businessName: "business_name",
+      description: "business_description",
+      whatsappNumber: "whatsapp_number",
+      logoUrl: "logo_url",
+      faviconUrl: "favicon_url",
+      storeStatus: "store_status",
+      instagram: "instagram",
+      facebook: "facebook",
+      tiktok: "tiktok",
+      youtube: "youtube",
+    };
 
     for (const [field, mapping] of Object.entries(mappings)) {
-      const config = typeof mapping === 'string' ? { key: mapping } : mapping
-      const value = data[field]
+      const config = typeof mapping === "string" ? { key: mapping } : mapping;
+      const value = data[field];
       if (value !== undefined) {
-        const existing = await Setting.findOne({ where: { tenantId, key: config.key } })
+        const existing = await Setting.findOne({
+          where: { tenantId, key: config.key },
+        });
         if (existing) {
-          await existing.update({ value })
+          await existing.update({ value });
         } else {
-          await Setting.create({ tenantId, key: config.key, value })
+          await Setting.create({ tenantId, key: config.key, value });
         }
       }
     }
 
-    res.json({ success: true })
+    res.json({ success: true });
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
 
 const seedProducts = async (req, res, next) => {
   try {
-    const { excelUrl, excelBase64, categoryId } = req.body
-    let buffer
+    const { excelUrl, excelBase64, categoryId } = req.body;
+    let buffer;
 
     if (excelBase64) {
-      buffer = Buffer.from(excelBase64, 'base64')
+      buffer = Buffer.from(excelBase64, "base64");
     } else if (excelUrl) {
       try {
-        const protocol = excelUrl.startsWith('https') ? require('https') : require('http')
+        const protocol = excelUrl.startsWith("https")
+          ? require("https")
+          : require("http");
         buffer = await new Promise((resolve, reject) => {
-          protocol.get(excelUrl, (response) => {
-            if (response.statusCode >= 300) {
-              reject(new Error(`Error descargando Excel: ${response.statusCode}`))
-              return
-            }
-            const chunks = []
-            response.on('data', (c) => chunks.push(c))
-            response.on('end', () => resolve(Buffer.concat(chunks)))
-          }).on('error', reject)
-        })
+          protocol
+            .get(excelUrl, (response) => {
+              if (response.statusCode >= 300) {
+                reject(
+                  new Error(`Error descargando Excel: ${response.statusCode}`),
+                );
+                return;
+              }
+              const chunks = [];
+              response.on("data", (c) => chunks.push(c));
+              response.on("end", () => resolve(Buffer.concat(chunks)));
+            })
+            .on("error", reject);
+        });
       } catch (downloadErr) {
-        return res.status(400).json({ error: `No se pudo descargar el Excel: ${downloadErr.message}` })
+        return res.status(400).json({
+          error: `No se pudo descargar el Excel: ${downloadErr.message}`,
+        });
       }
     } else {
-      return res.status(400).json({ error: 'excelUrl o excelBase64 requerido' })
+      return res
+        .status(400)
+        .json({ error: "excelUrl o excelBase64 requerido" });
     }
 
-    const XLSX = require('xlsx')
-    const workbook = XLSX.read(buffer, { type: 'buffer' })
-    const sheet = workbook.Sheets[workbook.SheetNames[0]]
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
+    const XLSX = require("xlsx");
+    const workbook = XLSX.read(buffer, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
     if (rows.length === 0) {
-      return res.json({ created: 0, warnings: [] })
+      return res.json({ created: 0, warnings: [] });
     }
 
-    const headers = Object.keys(rows[0])
-    const NAME_ALIASES = ['nombre', 'name', 'producto', 'product', 'product_name', 'producto_nombre']
-    const PRICE_ALIASES = ['precio', 'price', 'importe', 'costo', 'valor', 'retail_price', 'precio_venta']
+    const headers = Object.keys(rows[0]);
+    const NAME_ALIASES = [
+      "nombre",
+      "name",
+      "producto",
+      "product",
+      "product_name",
+      "producto_nombre",
+    ];
+    const PRICE_ALIASES = [
+      "precio",
+      "price",
+      "importe",
+      "costo",
+      "valor",
+      "retail_price",
+      "precio_venta",
+    ];
 
-    const slugify = (text) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 255) || 'sin-nombre'
+    const slugify = (text) =>
+      text
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .substring(0, 255) || "sin-nombre";
 
-    const nameCol = NAME_ALIASES.reduce((found, alias) => found || headers.find((h) => h.toLowerCase().includes(alias)) || '', '') || headers[0]
-    const priceCol = PRICE_ALIASES.reduce((found, alias) => found || headers.find((h) => h.toLowerCase().includes(alias)) || '', '') || headers[0]
+    const nameCol =
+      NAME_ALIASES.reduce(
+        (found, alias) =>
+          found || headers.find((h) => h.toLowerCase().includes(alias)) || "",
+        "",
+      ) || headers[0];
+    const priceCol =
+      PRICE_ALIASES.reduce(
+        (found, alias) =>
+          found || headers.find((h) => h.toLowerCase().includes(alias)) || "",
+        "",
+      ) || headers[0];
 
-    const tenantId = req.tenant.id
+    const tenantId = req.tenant.id;
     const products = rows
       .map((row) => {
-        const name = String(row[nameCol] ?? '').trim()
-        const price = row[priceCol]
-        if (!name || price == null || price === '' || isNaN(Number(price)) || Number(price) < 0) return null
+        const name = String(row[nameCol] ?? "").trim();
+        const price = row[priceCol];
+        if (
+          !name ||
+          price == null ||
+          price === "" ||
+          isNaN(Number(price)) ||
+          Number(price) < 0
+        )
+          return null;
         return {
           tenantId,
           name,
           slug: slugify(name),
           retailPrice: Number(price) || 0,
-          status: 'draft',
+          status: "draft",
           categoryId: categoryId || null,
-        }
+        };
       })
-      .filter(Boolean)
+      .filter(Boolean);
 
-    await Product.bulkCreate(products, { validate: true })
+    await Product.bulkCreate(products, { validate: true });
 
-    res.json({ created: products.length, warnings: [] })
+    res.json({ created: products.length, warnings: [] });
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
 
 const ensureTenantDomain = async (tenant) => {
   if (!tenant.domain) {
-    throw Object.assign(new Error('El tenant no tiene dominio configurado'), { status: 400 })
+    throw Object.assign(new Error("El tenant no tiene dominio configurado"), {
+      status: 400,
+    });
   }
-  const adminDomain = `admin.${tenant.domain}`
+  const adminDomain = `admin.${tenant.domain}`;
   if (tenant.adminDomain !== adminDomain) {
-    await tenant.update({ adminDomain })
+    await tenant.update({ adminDomain });
   }
-  return tenant
-}
+  return tenant;
+};
 
 const createAdmin = async (req, res, next) => {
   try {
-    const { email, name } = req.body
-    const tenantId = req.tenant.id
+    const { email, name } = req.body;
+    const tenantId = req.tenant.id;
     if (!email || !name) {
-      return res.status(400).json({ error: 'email y name son requeridos' })
+      return res.status(400).json({ error: "email y name son requeridos" });
     }
 
-    const tenant = await ensureTenantDomain(req.tenant)
+    const tenant = await ensureTenantDomain(req.tenant);
 
-    const existing = await User.findOne({ where: { tenantId, role: 'admin' } })
+    const existing = await User.findOne({ where: { tenantId, role: "admin" } });
     if (existing) {
-      return res.status(409).json({ error: 'Ya existe un administrador' })
+      return res.status(409).json({ error: "Ya existe un administrador" });
     }
 
-    const token = crypto.randomBytes(32).toString('hex')
-    const hash = crypto.createHash('sha256').update(token).digest('hex')
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24h
+    const token = crypto.randomBytes(32).toString("hex");
+    const hash = crypto.createHash("sha256").update(token).digest("hex");
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
 
     await User.create({
       tenantId,
       email,
       name,
-      password: '',
-      status: 'pending',
-      role: 'admin',
+      password: "",
+      status: "pending",
+      role: "admin",
       activationTokenHash: hash,
       activationExpires: expires,
       activationSentAt: new Date(),
-    })
+    });
 
-    const link = `${adminOriginFromTenant(tenant)}/activate/${token}`
+    const link = `${adminOriginFromTenant(tenant)}/activate/${token}`;
 
-    await emailService.sendActivationEmail(email, link)
+    await emailService.sendActivationEmail(email, link);
 
-    res.status(201).json({ success: true })
+    res.status(201).json({ success: true });
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
 
 const seedServices = async (req, res, next) => {
   try {
-    const services = req.body
-    const tenantId = req.tenant.id
+    const services = req.body;
+    const tenantId = req.tenant.id;
     if (!Array.isArray(services) || services.length === 0) {
-      return res.json({ created: 0 })
+      return res.json({ created: 0 });
     }
 
-    const slugify = (text) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 255)
+    const slugify = (text) =>
+      text
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .substring(0, 255);
 
     const rows = services
       .filter((s) => s.name?.trim())
@@ -183,38 +247,44 @@ const seedServices = async (req, res, next) => {
         slug: slugify(s.name.trim()),
         description: s.description || null,
         price: Number(s.price) || 0,
-        status: 'draft',
-      }))
+        status: "draft",
+      }));
 
     if (rows.length > 0) {
-      await Service.bulkCreate(rows, { validate: true })
+      await Service.bulkCreate(rows, { validate: true });
     }
 
-    res.json({ created: rows.length })
+    res.json({ created: rows.length });
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
 
 const getAdminStatus = async (req, res, next) => {
   try {
     const admin = await User.findOne({
-      where: { tenantId: req.tenant.id, role: 'admin' },
-      attributes: ['status', 'activationSentAt', 'activationExpires'],
-    })
+      where: { tenantId: req.tenant.id, role: "admin" },
+      attributes: ["status", "activationSentAt", "activationExpires"],
+    });
 
     if (!admin) {
-      return res.json({ exists: false })
+      return res.json({ exists: false });
     }
 
-    const now = new Date()
-    const sentAt = admin.activationSentAt ? new Date(admin.activationSentAt) : null
-    const expires = admin.activationExpires ? new Date(admin.activationExpires) : null
-    const secondsSinceSent = sentAt ? Math.floor((now - sentAt) / 1000) : Infinity
+    const now = new Date();
+    const sentAt = admin.activationSentAt
+      ? new Date(admin.activationSentAt)
+      : null;
+    const expires = admin.activationExpires
+      ? new Date(admin.activationExpires)
+      : null;
+    const secondsSinceSent = sentAt
+      ? Math.floor((now - sentAt) / 1000)
+      : Infinity;
 
-    let canResend = false
-    if (admin.status === 'pending' && secondsSinceSent >= 60) {
-      canResend = true
+    let canResend = false;
+    if (admin.status === "pending" && secondsSinceSent >= 60) {
+      canResend = true;
     }
 
     return res.json({
@@ -223,112 +293,184 @@ const getAdminStatus = async (req, res, next) => {
       activationSentAt: sentAt?.toISOString() || null,
       activationExpiresAt: expires?.toISOString() || null,
       canResend,
-    })
+    });
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
 
 const resendActivation = async (req, res, next) => {
   try {
-    const tenant = await ensureTenantDomain(req.tenant)
+    const tenant = await ensureTenantDomain(req.tenant);
 
-    const admin = await User.findOne({ where: { tenantId: tenant.id, role: 'admin' } })
+    const admin = await User.findOne({
+      where: { tenantId: tenant.id, role: "admin" },
+    });
     if (!admin) {
-      return res.status(404).json({ error: 'No hay administrador creado' })
+      return res.status(404).json({ error: "No hay administrador creado" });
     }
 
-    if (admin.status === 'active') {
-      return res.status(409).json({ error: 'El administrador ya está activado' })
+    if (admin.status === "active") {
+      return res
+        .status(409)
+        .json({ error: "El administrador ya está activado" });
     }
 
-    const now = new Date()
-    const sentAt = admin.activationSentAt ? new Date(admin.activationSentAt) : null
-    const secondsSinceSent = sentAt ? Math.floor((now - sentAt) / 1000) : Infinity
+    const now = new Date();
+    const sentAt = admin.activationSentAt
+      ? new Date(admin.activationSentAt)
+      : null;
+    const secondsSinceSent = sentAt
+      ? Math.floor((now - sentAt) / 1000)
+      : Infinity;
 
     if (secondsSinceSent < 60) {
-      const waitSeconds = 60 - secondsSinceSent
+      const waitSeconds = 60 - secondsSinceSent;
       return res.status(429).json({
         error: `Esperá ${waitSeconds} segundos antes de reenviar`,
         retryAfter: waitSeconds,
-      })
+      });
     }
 
-    const token = crypto.randomBytes(32).toString('hex')
-    const hash = crypto.createHash('sha256').update(token).digest('hex')
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    const token = crypto.randomBytes(32).toString("hex");
+    const hash = crypto.createHash("sha256").update(token).digest("hex");
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     await admin.update({
       activationTokenHash: hash,
       activationExpires: expires,
       activationSentAt: now,
-    })
+    });
 
-    const link = `${adminOriginFromTenant(tenant)}/activate/${token}`
+    const link = `${adminOriginFromTenant(tenant)}/activate/${token}`;
 
-    await emailService.sendActivationEmail(admin.email, link)
+    await emailService.sendActivationEmail(admin.email, link);
 
-    res.json({ success: true })
+    res.json({ success: true });
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
 
 const createTenant = async (req, res, next) => {
+  let transaction;
   try {
-    const { slug, name, domain, adminDomain, folderPrefix } = req.body
-    if (!slug || !name) {
-      return res.status(400).json({ error: 'slug y name son requeridos' })
+    const { slug, name, domain, adminDomain, folderPrefix } = req.body;
+
+    // Validamos obligatoriedad de slug, name y domain
+    if (!slug || !name || !domain) {
+      return res
+        .status(400)
+        .json({ error: "slug, name y domain son requeridos" });
     }
 
-    const existing = await Tenant.findOne({ where: { slug } })
+    const existing = await Tenant.findOne({ where: { slug } });
     if (existing) {
-      return res.status(409).json({ error: 'Ya existe un tenant con ese slug' })
+      return res
+        .status(409)
+        .json({ error: "Ya existe un tenant con ese slug" });
     }
 
-    const tenant = await Tenant.create({
-      slug,
-      name,
-      domain: domain || null,
-      adminDomain: adminDomain || null,
-      folderPrefix: folderPrefix || null,
-    })
+    const existingDomain = await Tenant.findOne({ where: { domain } });
+    if (existingDomain) {
+      return res
+        .status(409)
+        .json({ error: "Ya existe un tenant con ese domain" });
+    }
 
-    // Crear los settings default del tenant
-    await ensureDefaults(tenant.id)
+    transaction = await sequelize.transaction();
 
-    res.status(201).json({ id: tenant.id, slug: tenant.slug, name: tenant.name })
+    const tenant = await Tenant.create(
+      {
+        slug,
+        name,
+        domain,
+        adminDomain: adminDomain || `admin.${domain}`,
+        folderPrefix: folderPrefix || null,
+      },
+      { transaction },
+    );
+
+    // 1. Crear Settings iniciales
+    await ensureDefaults(tenant.id, transaction);
+
+    // 2. Crear Ficha de Facturación inicial (30 días de ciclo activo)
+    const now = new Date();
+    const periodEnd = new Date(now);
+    periodEnd.setDate(now.getDate() + 30);
+
+    await Billing.create(
+      {
+        tenantId: tenant.id,
+        planName: "Plan Comercio",
+        status: "active",
+        amount: 0.0,
+        currency: "ARS",
+        currentPeriodStart: now,
+        currentPeriodEnd: periodEnd,
+        graceDays: 4,
+      },
+      { transaction },
+    );
+
+    await transaction.commit();
+
+    res.status(201).json({
+      id: tenant.id,
+      slug: tenant.slug,
+      name: tenant.name,
+      domain: tenant.domain,
+      adminDomain: tenant.adminDomain,
+    });
   } catch (err) {
-    next(err)
+    if (transaction) await transaction.rollback();
+    next(err);
   }
-}
+};
 
 const listTenants = async (req, res, next) => {
   try {
-    const tenants = await Tenant.findAll({ order: [['id', 'ASC']] })
-    res.json(tenants)
+    const tenants = await Tenant.findAll({
+      order: [["id", "ASC"]],
+      include: [
+        {
+          model: Billing,
+          as: "billing",
+          attributes: [
+            "status",
+            "planName",
+            "currentPeriodStart",
+            "currentPeriodEnd",
+            "graceUntil",
+            "suspendedAt",
+          ],
+        },
+      ],
+    });
+    res.json(tenants);
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
 
 const updateTenant = async (req, res, next) => {
   try {
-    const { slug } = req.params
-    const { name, domain, adminDomain, folderPrefix } = req.body
+    const { slug } = req.params;
+    const { name, domain, adminDomain, folderPrefix } = req.body;
 
-    const tenant = await Tenant.findOne({ where: { slug } })
+    const tenant = await Tenant.findOne({ where: { slug } });
     if (!tenant) {
-      return res.status(404).json({ error: 'Tenant no encontrado' })
+      return res.status(404).json({ error: "Tenant no encontrado" });
     }
 
-    const updates = {}
-    if (name !== undefined) updates.name = name || tenant.name
-    if (domain !== undefined) updates.domain = domain || null
-    if (adminDomain !== undefined) updates.adminDomain = adminDomain || null
-    if (folderPrefix !== undefined) updates.folderPrefix = folderPrefix || null
+    const updates = {};
+    if (name !== undefined) updates.name = name || tenant.name;
+    if (domain !== undefined) updates.domain = domain || tenant.domain;
+    if (adminDomain !== undefined)
+      updates.adminDomain = adminDomain || tenant.adminDomain;
+    if (folderPrefix !== undefined) updates.folderPrefix = folderPrefix || null;
 
-    await tenant.update(updates)
+    await tenant.update(updates);
 
     res.json({
       id: tenant.id,
@@ -337,31 +479,60 @@ const updateTenant = async (req, res, next) => {
       domain: tenant.domain,
       adminDomain: tenant.adminDomain,
       folderPrefix: tenant.folderPrefix,
-    })
+    });
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
-
-const setBillingStatus = async (req, res, next) => {
-  try {
-    const { status } = req.body
-    if (!status) {
-      return res.status(400).json({ error: 'status es requerido' })
-    }
-    await setStatus(req.tenant.id, status)
-    res.json({ success: true, billing_status: await getStatus(req.tenant.id) })
-  } catch (err) {
-    next(err)
-  }
-}
+};
 
 const getBillingStatus = async (req, res, next) => {
   try {
-    res.json({ billing_status: await getStatus(req.tenant.id) })
+    const billing = await billingService.getBillingByTenantId(req.tenant.id);
+    res.json({
+      status: billing.status,
+      currentPeriodStart: billing.currentPeriodStart,
+      currentPeriodEnd: billing.currentPeriodEnd,
+      graceUntil: billing.graceUntil,
+    });
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
 
-module.exports = { createTenant, listTenants, updateTenant, createAdmin, seedSettings, seedProducts, seedServices, getAdminStatus, resendActivation, setBillingStatus, getBillingStatus }
+const setBillingStatus = async (req, res, next) => {
+  try {
+    const { status, currentPeriodStart, currentPeriodEnd, graceUntil } =
+      req.body;
+    if (!status) {
+      return res.status(400).json({ error: "status es requerido" });
+    }
+
+    const updated = await billingService.updateBillingByTenantId(
+      req.tenant.id,
+      {
+        status,
+        currentPeriodStart,
+        currentPeriodEnd,
+        graceUntil,
+      },
+    );
+
+    res.json({ success: true, billing: updated });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = {
+  createTenant,
+  listTenants,
+  updateTenant,
+  createAdmin,
+  seedSettings,
+  seedProducts,
+  seedServices,
+  getAdminStatus,
+  resendActivation,
+  setBillingStatus,
+  getBillingStatus,
+};

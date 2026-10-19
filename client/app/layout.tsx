@@ -1,3 +1,4 @@
+// app/layout.tsx
 import type { Metadata, Viewport } from "next";
 import { DM_Sans } from "next/font/google";
 import "./globals.css";
@@ -5,6 +6,7 @@ import { baseMetadata, baseViewport } from "@/data/metadata";
 import { AlertProvider } from "@/context/AlertContext";
 import { UnsavedChangesProvider } from "@/context/UnsavedChangesContext";
 import { AuthProvider } from "@/context/AuthContext";
+import { AdminStatusProvider } from "@/context/AdminStatusContext"; // <-- Nuevo
 import AdminShell from "@/components/admin/AdminShell";
 
 const dmSans = DM_Sans({
@@ -15,7 +17,6 @@ const dmSans = DM_Sans({
 });
 
 export const dynamic = "force-dynamic";
-
 export const viewport: Viewport = baseViewport;
 export const metadata: Metadata = baseMetadata;
 
@@ -50,7 +51,9 @@ export default function RootLayout({
           <AlertProvider>
             <UnsavedChangesProvider>
               <AuthProvider>
-                <AdminShell>{children}</AdminShell>
+                <AdminStatusProvider>
+                  <AdminShell>{children}</AdminShell>
+                </AdminStatusProvider>
               </AuthProvider>
             </UnsavedChangesProvider>
           </AlertProvider>

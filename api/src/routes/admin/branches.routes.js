@@ -1,6 +1,5 @@
-const branchesController = require("../../controllers/admin/branches.controller");
-
 const router = require("express").Router();
+const branchesController = require("../../controllers/admin/branches.controller");
 
 router.get("/", branchesController.list);
 router.put("/reorder", branchesController.reorder);

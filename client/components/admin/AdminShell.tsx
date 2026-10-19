@@ -5,7 +5,9 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { useAdminStatus } from "@/context/AdminStatusContext";
 import { Spinner, Skeleton } from "@/components/ui";
+import BillingAlertBanner from "@/components/admin/BillingAlertBanner";
 
 const Sidebar = dynamic(() => import("@/components/admin/Sidebar"), {
   ssr: false,
@@ -19,22 +21,10 @@ export default function AdminShell({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading } = useAuth();
+  const { user, loading, isPublic } = useAuth();
+  const { billing } = useAdminStatus();
   const pathname = usePathname();
-  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const isPublic =
-    pathname.startsWith("/login") ||
-    pathname.startsWith("/activate") ||
-    pathname.startsWith("/forgot") ||
-    pathname.startsWith("/reset");
-
-  useEffect(() => {
-    if (!loading && !user && !isPublic) {
-      router.push("/login");
-    }
-  }, [loading, user, isPublic, router]);
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -55,15 +45,36 @@ export default function AdminShell({
       </div>
     );
 
-  if (!user && !isPublic) return null;
-
+  // Rutas públicas se renderizan sin layout de admin
   if (isPublic) return <>{children}</>;
 
+  // Si no hay usuario y es ruta privada, AuthProvider ya está ejecutando router.replace('/login')
+  if (!user) return null;
+
+  const hasBillingAlert = billing && billing.status !== "active";
+
   return (
-    <div className="min-h-screen bg-[var(--color-bg-base)] text-[var(--color-text-primary)] transition-colors">
-      <Topbar onMenuOpen={() => setSidebarOpen(true)} />
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <main className="ml-0 lg:ml-64 p-4 pt-20 lg:p-6 lg:pt-20 min-h-[calc(100vh-5rem)]">
+    <div className="min-h-screen bg-[var(--color-bg-base)] text-[var(--color-text-primary)] transition-colors flex flex-col">
+      {/* 1. Banner fijo arriba de todo */}
+      <BillingAlertBanner billing={billing} />
+
+      {/* 2. Topbar y navegación */}
+      <Topbar
+        onMenuOpen={() => setSidebarOpen(true)}
+        hasAlert={hasBillingAlert}
+      />
+      <Sidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        hasAlert={hasBillingAlert}
+      />
+
+      {/* 3. Área de contenido: si hay alerta sumamos margen para que no quede solapado */}
+      <main
+        className={`ml-0 lg:ml-64 p-4 lg:p-6 min-h-[calc(100vh-5rem)] ${
+          hasBillingAlert ? "pt-28 lg:pt-28" : "pt-20 lg:pt-20"
+        }`}
+      >
         {children}
       </main>
     </div>
