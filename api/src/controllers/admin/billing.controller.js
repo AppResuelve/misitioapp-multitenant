@@ -16,6 +16,7 @@ async function getTenantBilling(req, res, next) {
       currency: billing.currency,
       currentPeriodStart: billing.currentPeriodStart,
       currentPeriodEnd: billing.currentPeriodEnd,
+      graceUntil: billing.graceUntil,
     });
   } catch (error) {
     next(error);

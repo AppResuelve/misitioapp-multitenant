@@ -3,13 +3,32 @@
 
 import Link from "next/link";
 import { AlertTriangle, XCircle, ArrowRight } from "lucide-react";
-import { formatDateLocale } from "@/utils/date";
 
 interface BillingInfo {
   status: "active" | "past_due" | "suspended";
   currentPeriodEnd?: string;
   graceUntil?: string;
 }
+
+const getRemainingDays = (dateStr?: string): number => {
+  if (!dateStr) return 0;
+  const target = new Date(dateStr).getTime();
+  const now = Date.now();
+  const diffMs = target - now;
+  return Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+};
+
+const formatDate = (dateStr?: string): string => {
+  if (!dateStr) return "";
+  try {
+    return new Date(dateStr).toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "short",
+    });
+  } catch {
+    return dateStr;
+  }
+};
 
 export default function BillingAlertBanner({
   billing,
@@ -21,11 +40,14 @@ export default function BillingAlertBanner({
   }
 
   const isSuspended = billing.status === "suspended";
+  const remainingDays = getRemainingDays(
+    billing.graceUntil || billing.currentPeriodEnd,
+  );
 
   return (
-    <div
+    <aside
       role="alert"
-      className={`w-full px-4 py-2.5 text-xs sm:text-sm font-medium border-b transition-colors select-none ${
+      className={`fixed top-0 left-0 right-0 h-10 z-50 px-4 flex items-center justify-between text-xs sm:text-sm font-medium border-b select-none transition-colors ${
         isSuspended
           ? "bg-red-600 text-white border-red-700 dark:bg-red-950 dark:border-red-900 dark:text-red-100"
           : "bg-amber-500 text-amber-950 border-amber-600 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-100"
@@ -39,43 +61,51 @@ export default function BillingAlertBanner({
             <AlertTriangle className="w-4 h-4 shrink-0 text-amber-950 dark:text-amber-400" />
           )}
 
-          <p className="truncate">
+          <div className="truncate">
             {isSuspended ? (
               <span>
-                <strong>Tienda suspendida:</strong> Tu período de gracia venció.
-                Las funciones públicas y administrativas están pausadas.
+                <strong>Tienda suspendida:</strong> Período de gracia vencido.
+                Funciones pausadas.
               </span>
             ) : (
               <span>
-                <strong>Pago pendiente:</strong> Tu ciclo venció{" "}
+                <strong>Pago pendiente:</strong> Ciclo vencido{" "}
                 {billing.currentPeriodEnd
-                  ? formatDateLocale(billing.currentPeriodEnd)
-                  : "recientemente"}
-                .
-                {billing.graceUntil && (
+                  ? formatDate(billing.currentPeriodEnd)
+                  : ""}
+                .{" "}
+                {remainingDays > 0 ? (
                   <span>
-                    {" "}
-                    Tenés gracia hasta el{" "}
-                    <strong>{formatDateLocale(billing.graceUntil)}</strong>.
+                    Quedan{" "}
+                    <strong>
+                      {remainingDays} {remainingDays === 1 ? "día" : "días"} de
+                      gracia
+                    </strong>
+                    .
+                  </span>
+                ) : (
+                  <span>
+                    <strong>¡Atención! Hoy vence la gracia</strong> antes de la
+                    suspensión.
                   </span>
                 )}
               </span>
             )}
-          </p>
+          </div>
         </div>
 
         <Link
           href="/dashboard/settings/billing"
-          className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold underline-offset-2 hover:underline transition-all ${
+          className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold underline-offset-2 hover:underline transition-all ${
             isSuspended
               ? "bg-white/20 hover:bg-white/30 text-white"
-              : "bg-amber-950/10 hover:bg-amber-950/20 text-amber-950 dark:text-amber-100 dark:bg-amber-900/40"
+              : "bg-amber-950/15 hover:bg-amber-950/25 text-amber-950 dark:text-amber-100 dark:bg-amber-900/50"
           }`}
         >
-          <span>Ver estado</span>
+          <span>Regularizar</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>
-    </div>
+    </aside>
   );
 }

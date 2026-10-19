@@ -51,6 +51,7 @@ export function AdminStatusProvider({
     try {
       setLoadingBilling(true);
       const { data } = await api.get("/admin/billing");
+
       setBilling(data);
     } catch (err) {
       // Si falla por 403 u otro error de red, no rompemos el árbol

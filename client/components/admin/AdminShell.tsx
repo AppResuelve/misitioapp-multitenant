@@ -3,11 +3,13 @@
 import { resolvePageTitle } from "@/data/metadata";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useAdminStatus } from "@/context/AdminStatusContext";
 import { Spinner, Skeleton } from "@/components/ui";
 import BillingAlertBanner from "@/components/admin/BillingAlertBanner";
+import AdminBlocked from "@/components/admin/AdminBlocked";
+import { LogOut } from "lucide-react";
 
 const Sidebar = dynamic(() => import("@/components/admin/Sidebar"), {
   ssr: false,
@@ -16,12 +18,15 @@ const Topbar = dynamic(() => import("@/components/admin/Topbar"), {
   ssr: false,
 });
 
+// Rutas declarativas que se consideran de "recuperación" o rescate de cuenta
+const RESCUE_ROUTES = ["/dashboard/settings/billing"];
+
 export default function AdminShell({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading, isPublic } = useAuth();
+  const { user, loading, isPublic, logout } = useAuth();
   const { billing } = useAdminStatus();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -45,34 +50,60 @@ export default function AdminShell({
       </div>
     );
 
-  // Rutas públicas se renderizan sin layout de admin
   if (isPublic) return <>{children}</>;
-
-  // Si no hay usuario y es ruta privada, AuthProvider ya está ejecutando router.replace('/login')
   if (!user) return null;
 
-  const hasBillingAlert = billing && billing.status !== "active";
+  // 1. Bloqueo por suspensión: si no está en la ruta de facturación, mostramos AdminBlocked
+  const isSuspended = billing?.status === "suspended";
+  const isRescueRoute = RESCUE_ROUTES.some((route) =>
+    pathname.startsWith(route),
+  );
+  if (isSuspended && !isRescueRoute) {
+    return <AdminBlocked reason="suspended" />;
+  }
+
+  // 2. MODO FOCUS / RESCATE: Si está suspendido pero está en /billing,
+  // NO montamos Sidebar ni Topbar normales. Damos un contenedor limpio sin navegación lateral.
+  if (isSuspended && isRescueRoute) {
+    return (
+      <div className="min-h-screen bg-[var(--color-bg-base)] text-[var(--color-text-primary)] transition-colors flex flex-col">
+        {/* Barra superior de rescate: Solo branding y salida */}
+        <header className="h-16 border-b border-[var(--color-border)] bg-[var(--color-bg-surface)] px-6 flex items-center justify-between">
+          <span className="font-bold text-sm tracking-tight">
+            Panel de Facturación
+          </span>
+          <button
+            onClick={logout}
+            className="inline-flex items-center gap-2 text-xs text-[var(--color-text-secondary)] hover:text-red-500 transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Cerrar sesión</span>
+          </button>
+        </header>
+
+        {/* Contenido centrado, sin márgenes de sidebar */}
+        <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+          {children}
+        </main>
+      </div>
+    );
+  }
+
+  // 3. MODO NORMAL (Active o Past Due)
+  const hasBanner = Boolean(billing && billing.status !== "active");
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg-base)] text-[var(--color-text-primary)] transition-colors flex flex-col">
-      {/* 1. Banner fijo arriba de todo */}
+    <div className="min-h-screen bg-[var(--color-bg-base)] text-[var(--color-text-primary)] transition-colors">
       <BillingAlertBanner billing={billing} />
-
-      {/* 2. Topbar y navegación */}
-      <Topbar
-        onMenuOpen={() => setSidebarOpen(true)}
-        hasAlert={hasBillingAlert}
-      />
+      <Topbar onMenuOpen={() => setSidebarOpen(true)} hasBanner />
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        hasAlert={hasBillingAlert}
+        hasBanner
       />
-
-      {/* 3. Área de contenido: si hay alerta sumamos margen para que no quede solapado */}
       <main
-        className={`ml-0 lg:ml-64 p-4 lg:p-6 min-h-[calc(100vh-5rem)] ${
-          hasBillingAlert ? "pt-28 lg:pt-28" : "pt-20 lg:pt-20"
+        className={`ml-0 lg:ml-64 p-4 lg:p-6 transition-[padding-top] duration-200 min-h-screen ${
+          hasBanner ? "mt-28" : "mt-16"
         }`}
       >
         {children}

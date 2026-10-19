@@ -118,7 +118,7 @@ const SETTINGS_ITEMS = [
   { to: "/dashboard/settings/help", label: "Ayuda", icon: HelpCircle },
 ];
 
-export default function Sidebar({ open, onClose, logoUrl }) {
+export default function Sidebar({ open, onClose, logoUrl, hasBanner = false }) {
   const pathname = usePathname();
   const router = useRouter();
   const { confirmLeave } = useUnsavedChanges();
@@ -319,10 +319,11 @@ export default function Sidebar({ open, onClose, logoUrl }) {
 
       <aside
         className={`
-          fixed left-0 top-0 bottom-0 w-64 bg-[var(--color-bg-surface)] border-r border-[var(--color-border)] flex flex-col z-50
-          transition-transform duration-300
+          fixed left-0 bottom-0 w-64 bg-[var(--color-bg-surface)] border-r border-[var(--color-border)] flex flex-col z-50
+          transition-all duration-300
           lg:translate-x-0
           ${open ? "translate-x-0" : "-translate-x-full"}
+          ${hasBanner ? "top-10" : "top-0"}
         `}
       >
         {sidebarContent}

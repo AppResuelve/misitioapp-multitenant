@@ -33,6 +33,8 @@
 
   /* ── Tipografía Admin ── */
   --font-admin: "DM Sans", system-ui, sans-serif;
+
+  --admin-banner-h: 0px;
 }
 
 :root {

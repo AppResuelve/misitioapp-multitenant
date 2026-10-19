@@ -15,10 +15,27 @@ export const resetLogoutFlag = () => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && !isLoggingOut) {
+    const status = error.response?.status;
+    const errorType = error.response?.data?.error;
+
+    // 1. Sesión vencida o inválida (401)
+    if (status === 401 && !isLoggingOut) {
       isLoggingOut = true;
       window.dispatchEvent(new CustomEvent("auth:logout"));
+      return Promise.reject(error);
     }
+
+    // 2. Tienda suspendida por facturación (403 store_suspended)
+    if (status === 403 && errorType === "store_suspended") {
+      // Evitamos bucle si el error proviene de la misma pantalla o endpoint de facturación
+      if (
+        typeof window !== "undefined" &&
+        !window.location.pathname.startsWith("/dashboard/settings/billing")
+      ) {
+        window.location.href = "/dashboard/settings/billing";
+      }
+    }
+
     return Promise.reject(error);
   },
 );

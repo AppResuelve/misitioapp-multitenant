@@ -41,52 +41,17 @@ const mountRoutes = (app) => {
   // Internal (requiere APPRESUELVE_SECRET — tenant explícito en cada endpoint)
   app.use("/api/internal", require("./internal.routes"));
 
-  // Store (pública — resuelve tenant por X-Tenant-Slug)
-  app.use(
-    "/api/store/products",
-    resolveTenant,
-    storeStatusMiddleware,
-    require("./store/products.routes"),
-  );
-  app.use(
-    "/api/store/categories",
-    resolveTenant,
-    storeStatusMiddleware,
-    require("./store/categories.routes"),
-  );
-  app.use(
-    "/api/store/settings",
-    resolveTenant,
-    require("./store/settings.routes"),
-  );
-  app.use(
-    "/api/store/orders",
-    resolveTenant,
-    storeStatusMiddleware,
-    require("./store/orders.routes"),
-  );
-  app.use(
-    "/api/store/services",
-    resolveTenant,
-    storeStatusMiddleware,
-    require("./store/services.routes"),
-  );
-  app.use(
-    "/api/store/tags",
-    resolveTenant,
-    storeStatusMiddleware,
-    require("./store/tags.routes"),
-  );
-  app.use(
-    "/api/store/discounts",
-    resolveTenant,
-    require("./store/discounts.routes"),
-  );
-  app.use(
-    "/api/store/branches",
-    resolveTenant,
-    require("./store/branches.routes"),
-  );
+  // Store (pública — resuelve tenant por X-Tenant-Slug y chequea estado operativo)
+  app.use("/api/store", resolveTenant, storeStatusMiddleware);
+
+  app.use("/api/store/products", require("./store/products.routes"));
+  app.use("/api/store/categories", require("./store/categories.routes"));
+  app.use("/api/store/settings", require("./store/settings.routes")); // Pasa libre por la excepción
+  app.use("/api/store/orders", require("./store/orders.routes"));
+  app.use("/api/store/services", require("./store/services.routes"));
+  app.use("/api/store/tags", require("./store/tags.routes"));
+  app.use("/api/store/discounts", require("./store/discounts.routes"));
+  app.use("/api/store/branches", require("./store/branches.routes"));
 };
 
 module.exports = mountRoutes;

@@ -7,7 +7,7 @@ import { useAlert } from "@/context/AlertContext";
 import { Modal } from "@/components/ui";
 import api from "@/services/admin-api";
 
-export default function Topbar({ onMenuOpen }) {
+export default function Topbar({ onMenuOpen, hasBanner = false }) {
   const { user, logout } = useAuth();
   const Alert = useAlert();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -53,7 +53,11 @@ export default function Topbar({ onMenuOpen }) {
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-40 h-16 bg-[var(--color-bg-surface)] border-b border-[var(--color-border)] flex items-center justify-between px-4 transition-colors">
+      <header
+        className={`fixed left-0 right-0 z-40 h-16 bg-[var(--color-bg-surface)] border-b border-[var(--color-border)] flex items-center justify-between px-4 transition-[top] duration-200 ${
+          hasBanner ? "top-10" : "top-0"
+        }`}
+      >
         {/* Mobile hamburger */}
         <button
           type="button"

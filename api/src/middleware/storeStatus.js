@@ -5,6 +5,12 @@ const storeStatus = async (req, res, next) => {
     const tenantId = req.tenant?.id;
     if (!tenantId) return next();
 
+    // EXCEPCIÓN: Permitir siempre leer settings para que el frontend público
+    // pueda mostrar logo, nombre y canales de contacto aun en pausa/mantenimiento
+    if (req.originalUrl && req.originalUrl.includes("/store/settings")) {
+      return next();
+    }
+
     // 1. Chequeo de Facturación
     const billing = await Billing.findOne({
       where: { tenantId },
