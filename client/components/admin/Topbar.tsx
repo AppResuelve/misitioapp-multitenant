@@ -55,7 +55,7 @@ export default function Topbar({ onMenuOpen, hasBanner = false }) {
     <>
       <header
         className={`fixed left-0 right-0 z-40 h-16 bg-[var(--color-bg-surface)] border-b border-[var(--color-border)] flex items-center justify-between px-4 transition-[top] duration-200 ${
-          hasBanner ? "top-10" : "top-0"
+          hasBanner ? "top-14" : "top-0"
         }`}
       >
         {/* Mobile hamburger */}

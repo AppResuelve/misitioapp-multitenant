@@ -95,15 +95,15 @@ export default function AdminShell({
   return (
     <div className="min-h-screen bg-[var(--color-bg-base)] text-[var(--color-text-primary)] transition-colors">
       <BillingAlertBanner billing={billing} />
-      <Topbar onMenuOpen={() => setSidebarOpen(true)} hasBanner />
+      <Topbar onMenuOpen={() => setSidebarOpen(true)} hasBanner={hasBanner} />
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        hasBanner
+        hasBanner={hasBanner}
       />
       <main
         className={`ml-0 lg:ml-64 p-4 lg:p-6 transition-[padding-top] duration-200 min-h-screen ${
-          hasBanner ? "mt-28" : "mt-16"
+          hasBanner ? "mt-32" : "mt-16"
         }`}
       >
         {children}

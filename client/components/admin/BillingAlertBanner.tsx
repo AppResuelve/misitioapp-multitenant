@@ -47,7 +47,7 @@ export default function BillingAlertBanner({
   return (
     <aside
       role="alert"
-      className={`fixed top-0 left-0 right-0 h-10 z-50 px-4 flex items-center justify-between text-xs sm:text-sm font-medium border-b select-none transition-colors ${
+      className={`fixed top-0 left-0 right-0 h-14 z-50 px-4 flex items-center justify-between text-xs sm:text-sm font-medium border-b select-none transition-colors ${
         isSuspended
           ? "bg-red-600 text-white border-red-700 dark:bg-red-950 dark:border-red-900 dark:text-red-100"
           : "bg-amber-500 text-amber-950 border-amber-600 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-100"
@@ -61,7 +61,7 @@ export default function BillingAlertBanner({
             <AlertTriangle className="w-4 h-4 shrink-0 text-amber-950 dark:text-amber-400" />
           )}
 
-          <div className="truncate">
+          <div>
             {isSuspended ? (
               <span>
                 <strong>Tienda suspendida:</strong> Período de gracia vencido.

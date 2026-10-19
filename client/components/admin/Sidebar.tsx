@@ -323,7 +323,7 @@ export default function Sidebar({ open, onClose, logoUrl, hasBanner = false }) {
           transition-all duration-300
           lg:translate-x-0
           ${open ? "translate-x-0" : "-translate-x-full"}
-          ${hasBanner ? "top-10" : "top-0"}
+          ${hasBanner ? "top-14" : "top-0"}
         `}
       >
         {sidebarContent}
