@@ -158,6 +158,20 @@ const createAdmin = async (req, res, next) => {
       activationSentAt: new Date(),
     });
 
+    const now = new Date();
+    const nextMonth = new Date(now);
+    nextMonth.setDate(nextMonth.getDate() + 30);
+
+    await Billing.update(
+      {
+        status: "active",
+        currentPeriodStart: now,
+        currentPeriodEnd: nextMonth,
+        changesThisMonth: 0,
+      },
+      { where: { tenantId: req.tenant.id } },
+    );
+
     await emailService.sendAdminActivation({ to: email, token, tenant });
 
     res.status(201).json({ success: true });
