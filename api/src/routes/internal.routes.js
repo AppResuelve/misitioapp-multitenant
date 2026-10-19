@@ -1,22 +1,30 @@
-const internalController = require('../controllers/admin/internal.controller')
-const internalAuth = require('../middleware/internalAuth')
-const resolveTenant = require('../middleware/resolveTenant')
+const { Router } = require("express");
+const internalController = require("../controllers/admin/internal.controller");
+const internalAuth = require("../middleware/internalAuth");
+const resolveTenant = require("../middleware/resolveTenant");
 
-const router = require('express').Router()
+const router = Router();
 
-// Gestión de tenants (sin resolveTenant: operan sobre la tabla tenants)
-router.post('/tenants', internalAuth, internalController.createTenant)
-router.get('/tenants', internalAuth, internalController.listTenants)
-router.put('/tenants/:slug', internalAuth, internalController.updateTenant)
+// 1. Todas las rutas internas validan el token de la plataforma
+router.use(internalAuth);
 
-// Endpoints que operan sobre un tenant específico (requieren X-Tenant-Slug)
-router.post('/create-admin', internalAuth, resolveTenant, internalController.createAdmin)
-router.get('/admin-status', internalAuth, resolveTenant, internalController.getAdminStatus)
-router.post('/resend-activation', internalAuth, resolveTenant, internalController.resendActivation)
-router.post('/seed-settings', internalAuth, resolveTenant, internalController.seedSettings)
-router.post('/seed-products', internalAuth, resolveTenant, internalController.seedProducts)
-router.post('/seed-services', internalAuth, resolveTenant, internalController.seedServices)
-router.get('/billing-status', internalAuth, resolveTenant, internalController.getBillingStatus)
-router.post('/billing-status', internalAuth, resolveTenant, internalController.setBillingStatus)
+// 2. Rutas globales del SaaS (no necesitan tenant previo)
+router.post("/tenants", internalController.createTenant);
+router.get("/tenants", internalController.listTenants);
+router.put("/tenants/:slug", internalController.updateTenant);
 
-module.exports = router
+// 3. A partir de acá, todas las rutas operan sobre un tenant concreto
+router.use(resolveTenant);
+
+// Admin del Tenant
+router.post("/create-admin", internalController.createAdmin);
+router.get("/admin-status", internalController.getAdminStatus);
+router.post("/resend-activation", internalController.resendActivation);
+
+// Facturación y Pagos
+router.get("/billing-status", internalController.getBillingStatus);
+router.post("/billing-status", internalController.setBillingStatus);
+router.put("/billing-status", internalController.setBillingStatus);
+router.post("/register-payment", internalController.registerTenantPayment);
+
+module.exports = router;

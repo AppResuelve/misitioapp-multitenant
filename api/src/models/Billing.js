@@ -67,6 +67,18 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      monthlyChangesLimit: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 2,
+        field: "monthly_changes_limit",
+      },
+      changesThisMonth: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        field: "changes_this_month",
+      },
     },
     {
       tableName: "billings",

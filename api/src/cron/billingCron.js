@@ -1,167 +1,167 @@
 const { Op } = require("sequelize");
-const { Billing, Tenant, EmailLog } = require("../models");
-const emailService = require("../services/email.service");
+const { Billing, Tenant, User, EmailLog } = require("../models");
+const { sendEmail, TYPES } = require("../modules/emails");
+const { adminOriginFromTenant } = require("../utils/adminOrigin");
 
-function addDays(date, days) {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
-}
+// Helper para armar la clave única por ciclo
+const getPeriodKey = (dateStr, prefix = "") => {
+  if (!dateStr) return null;
+  const dateFormatted = new Date(dateStr).toISOString().slice(0, 10); // YYYY-MM-DD
+  return prefix ? `${prefix}_${dateFormatted}` : dateFormatted;
+};
 
-function periodKeyOf(billing) {
-  if (!billing.currentPeriodEnd) return null;
-  return new Date(billing.currentPeriodEnd).toISOString().slice(0, 10);
-}
-
-// Envío con idempotencia garantizada por (tenant_id, type, period_key)
-async function notifyTenant(billing, tenant, type) {
-  const periodKey = periodKeyOf(billing);
-
+// Intenta registrar en email_logs garantizando idempotencia a nivel DB
+const dispatchEmailSafely = async ({ tenantId, to, type, periodKey, data }) => {
+  // 1. Verificación previa
   const existing = await EmailLog.findOne({
-    where: { tenantId: tenant.id, type, periodKey },
+    where: { tenantId, type, periodKey, status: "sent" },
   });
-  if (existing) return { sent: false, reason: "already_sent" };
+  if (existing) {
+    console.log(
+      `[billingCron] Email omitido (ya enviado): ${type} para tenant ${tenantId} (${periodKey})`,
+    );
+    return false;
+  }
 
+  // 2. Despachar correo vía Brevo
+  let sendError = null;
+  let result = null;
   try {
-    await emailService.sendBillingEmail(tenant, type, billing);
-    await EmailLog.create({
-      tenantId: tenant.id,
+    result = await sendEmail({
+      tenantId,
+      to,
       type,
-      periodKey,
-      status: "sent",
-      sentAt: new Date(),
+      data,
+      branding: "appresuelve",
     });
-    return { sent: true };
   } catch (err) {
+    sendError = err;
     console.error(
-      `[email] Error enviando "${type}" al tenant ${tenant.slug}:`,
+      `[billingCron] Error enviando email ${type} a ${to}:`,
       err.message,
     );
-    try {
-      await EmailLog.create({
-        tenantId: tenant.id,
-        type,
-        periodKey,
-        status: "failed",
-        error: err.message,
-        sentAt: new Date(),
-      });
-    } catch {}
-    return { sent: false, reason: "error" };
   }
-}
 
-async function runBillingCron() {
+  // 3. Registrar auditoría con upsert usando el índice único compuesto
+  try {
+    await EmailLog.upsert({
+      tenantId,
+      type,
+      periodKey,
+      status: sendError || !result ? "failed" : "sent",
+      error: sendError
+        ? sendError.message
+        : !result
+          ? "Fallo de respuesta de Brevo"
+          : null,
+      sentAt: sendError || !result ? null : new Date(),
+    });
+  } catch (dbErr) {
+    console.error(
+      `[billingCron] Error al guardar EmailLog para tenant ${tenantId}:`,
+      dbErr.message,
+    );
+  }
+
+  return Boolean(result);
+};
+
+const runBillingCron = async () => {
   const now = new Date();
-  const results = {
-    past_due: 0,
-    suspended: 0,
-    reminder: 0,
-    suspend_warning: 0,
-  };
+  console.log(
+    `[billingCron] Corriendo chequeo nocturno a fecha: ${now.toISOString()}`,
+  );
 
-  // 1. Vencidos de active -> past_due (con fecha límite graceUntil)
-  const expiredBillings = await Billing.findAll({
+  // =========================================================================
+  // CASO 1: Tiendas activas cuyo período vence hoy o venció recientemente
+  // Pasan a past_due (se activa el período de gracia)
+  // =========================================================================
+  const expiredActives = await Billing.findAll({
     where: {
       status: "active",
       currentPeriodEnd: { [Op.lte]: now },
     },
-    include: [{ model: Tenant, as: "tenant" }],
+    include: [{ model: Tenant }],
   });
 
-  for (const billing of expiredBillings) {
-    try {
-      const graceDays = billing.graceDays || 4;
-      const graceUntil = addDays(billing.currentPeriodEnd, graceDays);
+  for (const billing of expiredActives) {
+    // Si no tiene graceUntil seteado, le damos 5 días de gracia por defecto
+    const graceUntil =
+      billing.graceUntil || new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
 
-      await billing.update({
-        status: "past_due",
-        graceUntil,
-        lastCronAt: now,
-      });
+    billing.status = "past_due";
+    billing.graceUntil = graceUntil;
+    await billing.save();
 
-      if (billing.tenant) {
-        await notifyTenant(billing, billing.tenant, "billing_past_due");
-      }
-      results.past_due++;
-    } catch (err) {
-      console.error(
-        `[billing-cron] Error en past_due tenant ${billing.tenantId}:`,
-        err.message,
+    const adminUser = await User.findOne({
+      where: { tenantId: billing.tenantId, role: "admin", status: "active" },
+    });
+
+    if (adminUser) {
+      const periodKey = getPeriodKey(billing.currentPeriodEnd);
+      const daysLeft = Math.max(
+        1,
+        Math.ceil((new Date(graceUntil) - now) / (1000 * 60 * 60 * 24)),
       );
+      const billingUrl = `${adminOriginFromTenant(billing.Tenant)}/dashboard/settings/billing`;
+
+      await dispatchEmailSafely({
+        tenantId: billing.tenantId,
+        to: adminUser.email,
+        type: TYPES.SUBSCRIPTION_EXPIRING_SOON,
+        periodKey,
+        data: {
+          recipientName: adminUser.name,
+          tenantName: billing.Tenant?.name,
+          daysLeft,
+          billingUrl,
+        },
+      });
     }
   }
 
-  // 2. Gracia vencida de past_due -> suspended
-  const pastDueBillings = await Billing.findAll({
+  // =========================================================================
+  // CASO 2: Tiendas en past_due cuya fecha límite de gracia ya venció
+  // Pasan a suspended (bloqueo total) y se envía el mail de corte
+  // =========================================================================
+  const toSuspend = await Billing.findAll({
     where: {
       status: "past_due",
       graceUntil: { [Op.lte]: now },
     },
-    include: [{ model: Tenant, as: "tenant" }],
+    include: [{ model: Tenant }],
   });
 
-  for (const billing of pastDueBillings) {
-    try {
-      await billing.update({
-        status: "suspended",
-        suspendedAt: now,
-        graceUntil: null,
-        lastCronAt: now,
+  for (const billing of toSuspend) {
+    billing.status = "suspended";
+    billing.suspendedAt = now;
+    await billing.save();
+
+    const adminUser = await User.findOne({
+      where: { tenantId: billing.tenantId, role: "admin", status: "active" },
+    });
+
+    if (adminUser) {
+      const periodKey = getPeriodKey(billing.graceUntil, "suspended");
+      const billingUrl = `${adminOriginFromTenant(billing.Tenant)}/dashboard/settings/billing`;
+
+      await dispatchEmailSafely({
+        tenantId: billing.tenantId,
+        to: adminUser.email,
+        type: TYPES.ACCOUNT_SUSPENDED,
+        periodKey,
+        data: {
+          recipientName: adminUser.name,
+          tenantName: billing.Tenant?.name,
+          billingUrl,
+        },
       });
-
-      if (billing.tenant) {
-        await notifyTenant(billing, billing.tenant, "billing_suspended");
-      }
-      results.suspended++;
-    } catch (err) {
-      console.error(
-        `[billing-cron] Error al suspender tenant ${billing.tenantId}:`,
-        err.message,
-      );
     }
   }
 
-  // 3. Recordatorios preventivos (vence en los próximos 3 días)
-  const reminderThreshold = addDays(now, 3);
-  const reminderBillings = await Billing.findAll({
-    where: {
-      status: "active",
-      currentPeriodEnd: { [Op.gt]: now, [Op.lte]: reminderThreshold },
-    },
-    include: [{ model: Tenant, as: "tenant" }],
-  });
-
-  for (const billing of reminderBillings) {
-    if (billing.tenant) {
-      const r = await notifyTenant(billing, billing.tenant, "billing_reminder");
-      if (r.sent) results.reminder++;
-    }
-  }
-
-  // 4. Advertencia de suspensión (la gracia vence en las próximas 24hs)
-  const warningThreshold = addDays(now, 1);
-  const warningBillings = await Billing.findAll({
-    where: {
-      status: "past_due",
-      graceUntil: { [Op.gt]: now, [Op.lte]: warningThreshold },
-    },
-    include: [{ model: Tenant, as: "tenant" }],
-  });
-
-  for (const billing of warningBillings) {
-    if (billing.tenant) {
-      const r = await notifyTenant(
-        billing,
-        billing.tenant,
-        "billing_suspend_warning",
-      );
-      if (r.sent) results.suspend_warning++;
-    }
-  }
-
-  console.log(`[billing-cron] Finalizado:`, results);
-  return results;
-}
+  console.log(
+    `[billingCron] Finalizado: ${expiredActives.length} pasaron a past_due, ${toSuspend.length} suspendidos.`,
+  );
+};
 
 module.exports = { runBillingCron };

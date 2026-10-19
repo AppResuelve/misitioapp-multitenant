@@ -30,6 +30,11 @@ module.exports = (sequelize, DataTypes) => {
       as: "emailLogs",
     });
     Tenant.hasMany(models.Branch, { foreignKey: "tenantId", as: "branches" });
+    Tenant.hasOne(models.StoreSetting, {
+      foreignKey: "tenantId",
+      as: "storeSetting", // o "settings", según el alias que prefieras usar en tus includes
+      onDelete: "CASCADE",
+    });
   };
 
   return Tenant;

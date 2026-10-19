@@ -1,175 +1,15 @@
+const crypto = require("crypto");
 const {
   User,
-  Setting,
-  Product,
-  Service,
+  StoreSetting,
   Tenant,
   Billing,
   sequelize,
 } = require("../../models");
-const emailService = require("../../services/email.service");
-const billingService = require("../../services/billing.service");
-const { ensureDefaults } = require("../../services/store/settings.service");
-const { adminOriginFromTenant } = require("../../utils/adminOrigin");
-const crypto = require("crypto");
+const emailService = require("../../services/admin/email.service");
+const billingService = require("../../services/admin/billing.service");
 
-const seedSettings = async (req, res, next) => {
-  try {
-    const data = req.body;
-    const tenantId = req.tenant.id;
-
-    const mappings = {
-      businessName: "business_name",
-      description: "business_description",
-      whatsappNumber: "whatsapp_number",
-      logoUrl: "logo_url",
-      faviconUrl: "favicon_url",
-      storeStatus: "store_status",
-      instagram: "instagram",
-      facebook: "facebook",
-      tiktok: "tiktok",
-      youtube: "youtube",
-    };
-
-    for (const [field, mapping] of Object.entries(mappings)) {
-      const config = typeof mapping === "string" ? { key: mapping } : mapping;
-      const value = data[field];
-      if (value !== undefined) {
-        const existing = await Setting.findOne({
-          where: { tenantId, key: config.key },
-        });
-        if (existing) {
-          await existing.update({ value });
-        } else {
-          await Setting.create({ tenantId, key: config.key, value });
-        }
-      }
-    }
-
-    res.json({ success: true });
-  } catch (err) {
-    next(err);
-  }
-};
-
-const seedProducts = async (req, res, next) => {
-  try {
-    const { excelUrl, excelBase64, categoryId } = req.body;
-    let buffer;
-
-    if (excelBase64) {
-      buffer = Buffer.from(excelBase64, "base64");
-    } else if (excelUrl) {
-      try {
-        const protocol = excelUrl.startsWith("https")
-          ? require("https")
-          : require("http");
-        buffer = await new Promise((resolve, reject) => {
-          protocol
-            .get(excelUrl, (response) => {
-              if (response.statusCode >= 300) {
-                reject(
-                  new Error(`Error descargando Excel: ${response.statusCode}`),
-                );
-                return;
-              }
-              const chunks = [];
-              response.on("data", (c) => chunks.push(c));
-              response.on("end", () => resolve(Buffer.concat(chunks)));
-            })
-            .on("error", reject);
-        });
-      } catch (downloadErr) {
-        return res.status(400).json({
-          error: `No se pudo descargar el Excel: ${downloadErr.message}`,
-        });
-      }
-    } else {
-      return res
-        .status(400)
-        .json({ error: "excelUrl o excelBase64 requerido" });
-    }
-
-    const XLSX = require("xlsx");
-    const workbook = XLSX.read(buffer, { type: "buffer" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-
-    if (rows.length === 0) {
-      return res.json({ created: 0, warnings: [] });
-    }
-
-    const headers = Object.keys(rows[0]);
-    const NAME_ALIASES = [
-      "nombre",
-      "name",
-      "producto",
-      "product",
-      "product_name",
-      "producto_nombre",
-    ];
-    const PRICE_ALIASES = [
-      "precio",
-      "price",
-      "importe",
-      "costo",
-      "valor",
-      "retail_price",
-      "precio_venta",
-    ];
-
-    const slugify = (text) =>
-      text
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-        .substring(0, 255) || "sin-nombre";
-
-    const nameCol =
-      NAME_ALIASES.reduce(
-        (found, alias) =>
-          found || headers.find((h) => h.toLowerCase().includes(alias)) || "",
-        "",
-      ) || headers[0];
-    const priceCol =
-      PRICE_ALIASES.reduce(
-        (found, alias) =>
-          found || headers.find((h) => h.toLowerCase().includes(alias)) || "",
-        "",
-      ) || headers[0];
-
-    const tenantId = req.tenant.id;
-    const products = rows
-      .map((row) => {
-        const name = String(row[nameCol] ?? "").trim();
-        const price = row[priceCol];
-        if (
-          !name ||
-          price == null ||
-          price === "" ||
-          isNaN(Number(price)) ||
-          Number(price) < 0
-        )
-          return null;
-        return {
-          tenantId,
-          name,
-          slug: slugify(name),
-          retailPrice: Number(price) || 0,
-          status: "draft",
-          categoryId: categoryId || null,
-        };
-      })
-      .filter(Boolean);
-
-    await Product.bulkCreate(products, { validate: true });
-
-    res.json({ created: products.length, warnings: [] });
-  } catch (err) {
-    next(err);
-  }
-};
-
+// Helper para asegurar que el adminDomain esté consistente
 const ensureTenantDomain = async (tenant) => {
   if (!tenant.domain) {
     throw Object.assign(new Error("El tenant no tiene dominio configurado"), {
@@ -183,10 +23,114 @@ const ensureTenantDomain = async (tenant) => {
   return tenant;
 };
 
+/**
+ * 1. CREACIÓN DEL TENANT
+ * Invocado por Platform al crear una invitación
+ */
+const createTenant = async (req, res, next) => {
+  let transaction;
+  try {
+    const { slug, name, domain, adminDomain, folderPrefix, monthlyFee } =
+      req.body;
+
+    if (!slug || !name || !domain) {
+      return res
+        .status(400)
+        .json({ error: "slug, name y domain son requeridos" });
+    }
+
+    const existingSlug = await Tenant.findOne({ where: { slug } });
+    if (existingSlug) {
+      return res
+        .status(409)
+        .json({ error: "Ya existe un tenant con ese slug" });
+    }
+
+    const existingDomain = await Tenant.findOne({ where: { domain } });
+    if (existingDomain) {
+      return res
+        .status(409)
+        .json({ error: "Ya existe un tenant con ese domain" });
+    }
+
+    transaction = await sequelize.transaction();
+
+    // A. Crear Tenant
+    const tenant = await Tenant.create(
+      {
+        slug,
+        name,
+        domain,
+        adminDomain: adminDomain || `admin.${domain}`,
+        folderPrefix: folderPrefix || null,
+      },
+      { transaction },
+    );
+
+    // B. Crear StoreSetting inicial (1 fila única)
+    await StoreSetting.create(
+      {
+        tenantId: tenant.id,
+        businessName: name,
+        storeStatus: "active",
+        currency: "ARS",
+        logoUrl: "/logotipo.png",
+        faviconUrl: "/favicon.ico",
+        socialLinks: {
+          instagram: "",
+          facebook: "",
+          tiktok: "",
+          youtube: "",
+          whatsapp: "",
+        },
+      },
+      { transaction },
+    );
+
+    // C. Crear Ficha de Facturación inicial (30 días de ciclo + cuotas)
+    const now = new Date();
+    const periodEnd = new Date(now);
+    periodEnd.setDate(now.getDate() + 30);
+
+    await Billing.create(
+      {
+        tenantId: tenant.id,
+        planName: "Plan Comercio",
+        status: "active",
+        amount: monthlyFee || 0.0,
+        currency: "ARS",
+        currentPeriodStart: now,
+        currentPeriodEnd: periodEnd,
+        graceDays: 4,
+        monthlyChangesLimit: 2,
+        changesThisMonth: 0,
+      },
+      { transaction },
+    );
+
+    await transaction.commit();
+
+    return res.status(201).json({
+      id: tenant.id,
+      slug: tenant.slug,
+      name: tenant.name,
+      domain: tenant.domain,
+      adminDomain: tenant.adminDomain,
+    });
+  } catch (err) {
+    if (transaction) await transaction.rollback();
+    next(err);
+  }
+};
+
+/**
+ * 2. ADMINISTRACIÓN DEL TENANT
+ */
 const createAdmin = async (req, res, next) => {
   try {
     const { email, name } = req.body;
     const tenantId = req.tenant.id;
+
     if (!email || !name) {
       return res.status(400).json({ error: "email y name son requeridos" });
     }
@@ -200,7 +144,7 @@ const createAdmin = async (req, res, next) => {
 
     const token = crypto.randomBytes(32).toString("hex");
     const hash = crypto.createHash("sha256").update(token).digest("hex");
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24hs
 
     await User.create({
       tenantId,
@@ -214,47 +158,9 @@ const createAdmin = async (req, res, next) => {
       activationSentAt: new Date(),
     });
 
-    const link = `${adminOriginFromTenant(tenant)}/activate/${token}`;
-
-    await emailService.sendActivationEmail(email, link);
+    await emailService.sendAdminActivation({ to: email, token, tenant });
 
     res.status(201).json({ success: true });
-  } catch (err) {
-    next(err);
-  }
-};
-
-const seedServices = async (req, res, next) => {
-  try {
-    const services = req.body;
-    const tenantId = req.tenant.id;
-    if (!Array.isArray(services) || services.length === 0) {
-      return res.json({ created: 0 });
-    }
-
-    const slugify = (text) =>
-      text
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-        .substring(0, 255);
-
-    const rows = services
-      .filter((s) => s.name?.trim())
-      .map((s) => ({
-        tenantId,
-        name: s.name.trim(),
-        slug: slugify(s.name.trim()),
-        description: s.description || null,
-        price: Number(s.price) || 0,
-        status: "draft",
-      }));
-
-    if (rows.length > 0) {
-      await Service.bulkCreate(rows, { validate: true });
-    }
-
-    res.json({ created: rows.length });
   } catch (err) {
     next(err);
   }
@@ -282,10 +188,7 @@ const getAdminStatus = async (req, res, next) => {
       ? Math.floor((now - sentAt) / 1000)
       : Infinity;
 
-    let canResend = false;
-    if (admin.status === "pending" && secondsSinceSent >= 60) {
-      canResend = true;
-    }
+    const canResend = admin.status === "pending" && secondsSinceSent >= 60;
 
     return res.json({
       exists: true,
@@ -342,9 +245,7 @@ const resendActivation = async (req, res, next) => {
       activationSentAt: now,
     });
 
-    const link = `${adminOriginFromTenant(tenant)}/activate/${token}`;
-
-    await emailService.sendActivationEmail(admin.email, link);
+    await emailService.sendAdminActivation({ to: admin.email, token, tenant });
 
     res.json({ success: true });
   } catch (err) {
@@ -352,107 +253,9 @@ const resendActivation = async (req, res, next) => {
   }
 };
 
-const createTenant = async (req, res, next) => {
-  let transaction;
-  try {
-    const { slug, name, domain, adminDomain, folderPrefix } = req.body;
-
-    // Validamos obligatoriedad de slug, name y domain
-    if (!slug || !name || !domain) {
-      return res
-        .status(400)
-        .json({ error: "slug, name y domain son requeridos" });
-    }
-
-    const existing = await Tenant.findOne({ where: { slug } });
-    if (existing) {
-      return res
-        .status(409)
-        .json({ error: "Ya existe un tenant con ese slug" });
-    }
-
-    const existingDomain = await Tenant.findOne({ where: { domain } });
-    if (existingDomain) {
-      return res
-        .status(409)
-        .json({ error: "Ya existe un tenant con ese domain" });
-    }
-
-    transaction = await sequelize.transaction();
-
-    const tenant = await Tenant.create(
-      {
-        slug,
-        name,
-        domain,
-        adminDomain: adminDomain || `admin.${domain}`,
-        folderPrefix: folderPrefix || null,
-      },
-      { transaction },
-    );
-
-    // 1. Crear Settings iniciales
-    await ensureDefaults(tenant.id, transaction);
-
-    // 2. Crear Ficha de Facturación inicial (30 días de ciclo activo)
-    const now = new Date();
-    const periodEnd = new Date(now);
-    periodEnd.setDate(now.getDate() + 30);
-
-    await Billing.create(
-      {
-        tenantId: tenant.id,
-        planName: "Plan Comercio",
-        status: "active",
-        amount: 0.0,
-        currency: "ARS",
-        currentPeriodStart: now,
-        currentPeriodEnd: periodEnd,
-        graceDays: 4,
-      },
-      { transaction },
-    );
-
-    await transaction.commit();
-
-    res.status(201).json({
-      id: tenant.id,
-      slug: tenant.slug,
-      name: tenant.name,
-      domain: tenant.domain,
-      adminDomain: tenant.adminDomain,
-    });
-  } catch (err) {
-    if (transaction) await transaction.rollback();
-    next(err);
-  }
-};
-
-const listTenants = async (req, res, next) => {
-  try {
-    const tenants = await Tenant.findAll({
-      order: [["id", "ASC"]],
-      include: [
-        {
-          model: Billing,
-          as: "billing",
-          attributes: [
-            "status",
-            "planName",
-            "currentPeriodStart",
-            "currentPeriodEnd",
-            "graceUntil",
-            "suspendedAt",
-          ],
-        },
-      ],
-    });
-    res.json(tenants);
-  } catch (err) {
-    next(err);
-  }
-};
-
+/**
+ * 3. ACTUALIZACIÓN DE TENANT
+ */
 const updateTenant = async (req, res, next) => {
   try {
     const { slug } = req.params;
@@ -485,6 +288,36 @@ const updateTenant = async (req, res, next) => {
   }
 };
 
+const listTenants = async (req, res, next) => {
+  try {
+    const tenants = await Tenant.findAll({
+      order: [["id", "ASC"]],
+      include: [
+        {
+          model: Billing,
+          as: "billing",
+          attributes: [
+            "status",
+            "planName",
+            "currentPeriodStart",
+            "currentPeriodEnd",
+            "graceUntil",
+            "suspendedAt",
+            "monthlyChangesLimit",
+            "changesThisMonth",
+          ],
+        },
+      ],
+    });
+    res.json(tenants);
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * 4. FACTURACIÓN Y PAGOS (Sincronización con Platform)
+ */
 const getBillingStatus = async (req, res, next) => {
   try {
     const billing = await billingService.getBillingByTenantId(req.tenant.id);
@@ -493,6 +326,8 @@ const getBillingStatus = async (req, res, next) => {
       currentPeriodStart: billing.currentPeriodStart,
       currentPeriodEnd: billing.currentPeriodEnd,
       graceUntil: billing.graceUntil,
+      monthlyChangesLimit: billing.monthlyChangesLimit,
+      changesThisMonth: billing.changesThisMonth,
     });
   } catch (err) {
     next(err);
@@ -507,15 +342,52 @@ const setBillingStatus = async (req, res, next) => {
       return res.status(400).json({ error: "status es requerido" });
     }
 
+    const payload = { status };
+    if (currentPeriodStart !== undefined)
+      payload.currentPeriodStart = currentPeriodStart;
+    if (currentPeriodEnd !== undefined)
+      payload.currentPeriodEnd = currentPeriodEnd;
+    if (graceUntil !== undefined) payload.graceUntil = graceUntil;
+
+    if (status === "active") {
+      payload.suspendedAt = null;
+    } else if (status === "suspended") {
+      payload.suspendedAt = new Date();
+    }
+
     const updated = await billingService.updateBillingByTenantId(
       req.tenant.id,
-      {
-        status,
-        currentPeriodStart,
-        currentPeriodEnd,
-        graceUntil,
-      },
+      payload,
     );
+    res.json({ success: true, billing: updated });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const registerTenantPayment = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const billing = await billingService.getBillingByTenantId(tenantId);
+
+    const now = new Date();
+    // Si el período actual aún no venció, extendemos a partir de esa fecha; si venció, a partir de hoy
+    const periodStart =
+      billing?.currentPeriodEnd && new Date(billing.currentPeriodEnd) > now
+        ? new Date(billing.currentPeriodEnd)
+        : now;
+
+    const periodEnd = new Date(periodStart);
+    periodEnd.setDate(periodEnd.getDate() + 30);
+
+    const updated = await billingService.updateBillingByTenantId(tenantId, {
+      status: "active",
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+      graceUntil: null,
+      suspendedAt: null,
+      changesThisMonth: 0, // Reset de cuota mensual
+    });
 
     res.json({ success: true, billing: updated });
   } catch (err) {
@@ -528,11 +400,9 @@ module.exports = {
   listTenants,
   updateTenant,
   createAdmin,
-  seedSettings,
-  seedProducts,
-  seedServices,
   getAdminStatus,
   resendActivation,
-  setBillingStatus,
   getBillingStatus,
+  setBillingStatus,
+  registerTenantPayment,
 };

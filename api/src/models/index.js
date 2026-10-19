@@ -6,7 +6,10 @@ const models = {
   Product: require("./Product")(sequelize, require("sequelize").DataTypes),
   Category: require("./Category")(sequelize, require("sequelize").DataTypes),
   Order: require("./Order")(sequelize, require("sequelize").DataTypes),
-  Setting: require("./Setting")(sequelize, require("sequelize").DataTypes),
+  StoreSetting: require("./StoreSetting")(
+    sequelize,
+    require("sequelize").DataTypes,
+  ),
   Media: require("./Media")(sequelize, require("sequelize").DataTypes),
   ChangeRequest: require("./ChangeRequest")(
     sequelize,
@@ -57,7 +60,7 @@ const TENANTED_MODELS = [
   "Category",
   "Product",
   "Order",
-  "Setting",
+  "StoreSetting",
   "Media",
   "ChangeRequest",
   "Service",
