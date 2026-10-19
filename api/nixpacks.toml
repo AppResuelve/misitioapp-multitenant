@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["nodejs_20", "pnpm"]
+nixPkgs = ["nodejs_22", "pnpm"]
 
 [phases.install]
 cmds = ["pnpm install --frozen-lockfile"]
@@ -8,4 +8,4 @@ cmds = ["pnpm install --frozen-lockfile"]
 cmds = []
 
 [start]
-cmd = "pnpm start"
+cmd = "npx sequelize-cli db:migrate && node src/index.js"
