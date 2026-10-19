@@ -26,7 +26,20 @@ export default function GeneralSettings() {
   useEffect(() => {
     api
       .get("/admin/settings")
-      .then(({ data }) => setSettings((prev) => ({ ...prev, ...data })))
+      .then(({ data }) => {
+        setSettings({
+          businessName: data.businessName || "",
+          businessSlogan: data.businessSlogan || "",
+          businessDescription: data.businessDescription || "",
+          logoUrl: data.logoUrl || "",
+          faviconUrl: data.faviconUrl || "",
+          email: data.email || "",
+          socialLinks: {
+            ...INITIAL_GENERAL_SETTINGS.socialLinks,
+            ...(data.socialLinks || {}),
+          },
+        });
+      })
       .catch(() => {
         Alert.fire({
           message: GENERAL_SETTINGS_MESSAGES.FETCH_ERROR,
@@ -40,12 +53,31 @@ export default function GeneralSettings() {
     setSettings((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleSocialChange = (key: string, value: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      socialLinks: {
+        ...prev.socialLinks,
+        [key]: value,
+      },
+    }));
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
 
     try {
-      await api.put("/admin/settings", settings);
+      // Enviamos el payload con la estructura tipada que espera StoreSetting
+      await api.put("/admin/settings", {
+        businessName: settings.businessName,
+        businessSlogan: settings.businessSlogan,
+        businessDescription: settings.businessDescription,
+        logoUrl: settings.logoUrl,
+        faviconUrl: settings.faviconUrl,
+        email: settings.email,
+        socialLinks: settings.socialLinks,
+      });
 
       Alert.fire({
         message: GENERAL_SETTINGS_MESSAGES.SAVE_SUCCESS,
@@ -95,24 +127,22 @@ export default function GeneralSettings() {
             <div className="space-y-4">
               <Input
                 label="Nombre del negocio"
-                value={settings.business_name}
-                onChange={(e) => handleChange("business_name", e.target.value)}
+                value={settings.businessName}
+                onChange={(e) => handleChange("businessName", e.target.value)}
                 placeholder="Mi Tienda"
                 required
               />
               <Input
                 label="Slogan"
-                value={settings.business_slogan}
-                onChange={(e) =>
-                  handleChange("business_slogan", e.target.value)
-                }
+                value={settings.businessSlogan}
+                onChange={(e) => handleChange("businessSlogan", e.target.value)}
                 placeholder="Pastelería artesanal y diseño dulce"
               />
               <Textarea
                 label="Descripción"
-                value={settings.business_description}
+                value={settings.businessDescription}
                 onChange={(e) =>
-                  handleChange("business_description", e.target.value)
+                  handleChange("businessDescription", e.target.value)
                 }
                 placeholder="Contale a tus clientes de qué se trata tu propuesta..."
                 maxLength={1000}
@@ -121,18 +151,16 @@ export default function GeneralSettings() {
               <div className="grid grid-cols-2 gap-4 pt-2 border-t border-[var(--color-border)]">
                 <ImageUpload
                   label="Logo"
-                  images={settings.logo_url ? [settings.logo_url] : []}
-                  onChange={(imgs) => handleChange("logo_url", imgs[0] || "")}
+                  images={settings.logoUrl ? [settings.logoUrl] : []}
+                  onChange={(imgs) => handleChange("logoUrl", imgs[0] || "")}
                   max={1}
                   cols={2}
                   folder="branding"
                 />
                 <ImageUpload
                   label="Favicon"
-                  images={settings.favicon_url ? [settings.favicon_url] : []}
-                  onChange={(imgs) =>
-                    handleChange("favicon_url", imgs[0] || "")
-                  }
+                  images={settings.faviconUrl ? [settings.faviconUrl] : []}
+                  onChange={(imgs) => handleChange("faviconUrl", imgs[0] || "")}
                   max={1}
                   cols={2}
                   folder="branding"
@@ -150,7 +178,7 @@ export default function GeneralSettings() {
               <Input
                 label="Email de atención"
                 type="email"
-                value={settings.email}
+                value={settings.email || ""}
                 onChange={(e) => handleChange("email", e.target.value)}
                 placeholder="hola@mitienda.com"
               />
@@ -168,8 +196,8 @@ export default function GeneralSettings() {
                     <Input
                       key={key}
                       label={label}
-                      value={settings[key] || ""}
-                      onChange={(e) => handleChange(key, e.target.value)}
+                      value={settings.socialLinks?.[key] || ""}
+                      onChange={(e) => handleSocialChange(key, e.target.value)}
                       placeholder={placeholder}
                     />
                   );

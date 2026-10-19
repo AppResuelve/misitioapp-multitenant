@@ -9,14 +9,10 @@ const getStoreContactEmail = async (tenantId) => {
 
   const storeSetting = await StoreSetting.findOne({
     where: { tenantId },
-    attributes: ["supportEmail"], // o 'support_email' según la definición de tu modelo
+    attributes: ["email"], 
   });
 
-  return (
-    storeSetting?.supportEmail ||
-    storeSetting?.getDataValue?.("support_email") ||
-    null
-  );
+  return storeSetting?.email || null;
 };
 
 /**

@@ -2,11 +2,12 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { Op } = require("sequelize");
-const { User, StoreSetting, Billing } = require("../models");
+const { User, Billing } = require("../models");
 const emailService = require("./admin/email.service");
+const settingsService = require("./store/settings.service");
 const { adminOriginFromTenant } = require("../utils/adminOrigin");
 
-// Helper para obtener el estado completo de facturación desde la tabla billings
+// Helper para obtener el estado de facturación desde la tabla billings
 const getBillingInfo = async (tenantId) => {
   if (!tenantId) {
     return { status: "active", planName: "Plan Inicial" };
@@ -30,20 +31,18 @@ const getBillingInfo = async (tenantId) => {
       return { status: "active", planName: "Plan Inicial" };
     }
 
-    return billing.toJSON();
+    return billing.toJSON ? billing.toJSON() : billing;
   } catch (err) {
     console.error("[auth.service] Error al consultar billing:", err.message);
     return { status: "active", planName: "Plan Inicial" };
   }
 };
 
+// Resuelve el nombre del negocio desde el caché en memoria
 const getBusinessName = async (tenantId) => {
   if (!tenantId) return "";
-  const storeSetting = await StoreSetting.findOne({
-    where: { tenantId },
-    attributes: ["businessName"], // o "business_name" según tu mapeo en el modelo
-  });
-  return storeSetting?.businessName || storeSetting?.business_name || "";
+  const settings = await settingsService.getSettings(tenantId);
+  return settings?.businessName || "";
 };
 
 const generateToken = (user) => {
@@ -89,8 +88,7 @@ const login = async (email, password, tenantId) => {
         role: "super_admin",
         tenantId,
         billing,
-        billing_status: billing.status, // retrocompatibilidad temporal
-        business_name: businessName,
+        businessName,
       },
     };
   }
@@ -117,8 +115,7 @@ const login = async (email, password, tenantId) => {
       role: user.role,
       tenantId: user.tenantId,
       billing,
-      billing_status: billing.status, // retrocompatibilidad temporal
-      business_name: businessName,
+      businessName,
     },
   };
 };
@@ -199,13 +196,12 @@ const forgotPassword = async (tenantId, email, tenant) => {
     where: { tenantId, email, status: "active" },
   });
   if (!user) {
-    // No revelar existencia del email por seguridad
     return { success: true };
   }
 
   const token = crypto.randomBytes(32).toString("hex");
   const hash = crypto.createHash("sha256").update(token).digest("hex");
-  const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora de validez
+  const expires = new Date(Date.now() + 60 * 60 * 1000);
 
   await user.update({ resetTokenHash: hash, resetExpires: expires });
 
@@ -267,8 +263,7 @@ const me = async (userId, tenantId) => {
       role: "super_admin",
       tenantId,
       billing,
-      billing_status: billing.status,
-      business_name: businessName,
+      businessName,
     };
   }
 
@@ -286,8 +281,7 @@ const me = async (userId, tenantId) => {
     role: user.role,
     tenantId: user.tenantId,
     billing,
-    billing_status: billing.status,
-    business_name: businessName,
+    businessName,
   };
 };
 

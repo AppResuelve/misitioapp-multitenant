@@ -1,63 +1,103 @@
 const { StoreSetting } = require("../../models");
+const { proxyAssetUrl } = require("../../utils/cdn");
+const {
+  getCachedSettings,
+  setCachedSettings,
+  invalidateSettingsCache,
+} = require("../../utils/cache/settingsCache");
+
+const DEFAULTS = {
+  storeStatus: "active",
+  businessName: "",
+  businessSlogan: "",
+  businessDescription: "",
+  logoUrl: "/logotipo.png",
+  faviconUrl: "/logotipo.png",
+  socialLinks: {
+    instagram: "",
+    facebook: "",
+    tiktok: "",
+    youtube: "",
+  },
+};
+
+const formatWithCdn = (settings) => {
+  if (!settings) return null;
+  const raw = settings.toJSON ? settings.toJSON() : { ...settings };
+
+  if (raw.logoUrl) raw.logoUrl = proxyAssetUrl(raw.logoUrl);
+  if (raw.faviconUrl) raw.faviconUrl = proxyAssetUrl(raw.faviconUrl);
+
+  return raw;
+};
 
 /**
- * Obtiene la configuración completa de la tienda del tenant.
+ * Obtiene la fila completa del tenant
  */
 const getAll = async (tenantId) => {
-  const storeSetting = await StoreSetting.findOne({
+  if (!tenantId) return null;
+
+  // 1. Si ya está en la memoria RAM, lo devuelve al instante
+  const cached = getCachedSettings(tenantId);
+  if (cached) return cached;
+
+  // 2. Si no, va a Postgres
+  let storeSetting = await StoreSetting.findOne({
     where: { tenantId },
   });
 
-  return storeSetting ? storeSetting.toJSON() : null;
+  if (!storeSetting) {
+    const [created] = await StoreSetting.findOrCreate({
+      where: { tenantId },
+      defaults: { tenantId, ...DEFAULTS },
+    });
+    storeSetting = created;
+  }
+
+  const formatted = formatWithCdn(storeSetting);
+
+  // 3. Lo guarda en RAM para la próxima
+  setCachedSettings(tenantId, formatted);
+
+  return formatted;
 };
 
 /**
- * Obtiene un campo específico de la configuración.
+ * Obtiene una columna específica (ej: get(tenantId, 'businessName'))
  */
-const get = async (tenantId, key) => {
-  const storeSetting = await StoreSetting.findOne({
-    where: { tenantId },
-  });
-
-  if (!storeSetting) return null;
-
-  // Permite acceder tanto en camelCase como en snake_case
-  return storeSetting[key] ?? storeSetting.getDataValue?.(key) ?? null;
+const get = async (tenantId, propertyName) => {
+  const settings = await getAll(tenantId);
+  if (!settings) return null;
+  return settings[propertyName] ?? null;
 };
 
 /**
- * Actualiza un único campo o propiedad.
- */
-const set = async (tenantId, key, value) => {
-  return setBulk(tenantId, { [key]: value });
-};
-
-/**
- * Actualiza múltiples campos de la configuración de la tienda en 1 sola consulta.
- * Hace upsert sobre la fila del tenant.
+ * Guarda los cambios que vienen del formulario del Admin
  */
 const setBulk = async (tenantId, data) => {
+  if (!tenantId) return null;
+
   if (!data || Object.keys(data).length === 0) {
     return getAll(tenantId);
   }
 
-  // Buscamos o creamos la fila del tenant
   const [storeSetting] = await StoreSetting.findOrCreate({
     where: { tenantId },
-    defaults: { tenantId, ...data },
+    defaults: { tenantId, ...DEFAULTS, ...data },
   });
 
-  // Si ya existía, actualizamos únicamente los campos enviados
+  // 1. Guarda en Postgres
   await storeSetting.update(data);
 
-  return storeSetting.toJSON();
+  // 2. BORRA EL CACHÉ (acá se invalida para que no queden datos viejos en memoria)
+  invalidateSettingsCache(tenantId);
+
+  // 3. Devuelve los datos actualizados
+  return getAll(tenantId);
 };
 
-/**
- * Alias de compatibilidad por si algún controlador aún invoca upsertSetting.
- */
-const upsertSetting = async (tenantId, key, value) => {
-  return set(tenantId, key, value);
+const set = async (tenantId, propertyName, value) => {
+  return setBulk(tenantId, { [propertyName]: value });
 };
 
 module.exports = {
@@ -65,5 +105,4 @@ module.exports = {
   get,
   set,
   setBulk,
-  upsertSetting,
 };

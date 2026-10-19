@@ -10,7 +10,11 @@ const {
 } = require("../../models");
 const { Op } = require("sequelize");
 const { applyUnitPricing } = require("../../utils/unitPricing");
-const { getActiveDiscounts, resolveProductPricing } = require("./discounts.service");
+const { proxyProductImages } = require("../../utils/cdn");
+const {
+  getActiveDiscounts,
+  resolveProductPricing,
+} = require("./discounts.service");
 const sanitizeHtml = require("sanitize-html");
 
 const sanitizeDescription = (html) =>
@@ -52,8 +56,6 @@ const list = async (tenantId, query = {}) => {
 
   const conditions = ['"Product"."status" = \'active\''];
   const bindParams = [];
-
-  console.log('[PRODUCTS SVC list] IN tenantId:', tenantId, '| query:', JSON.stringify(query))
 
   if (tenantId) {
     conditions.push(`"Product"."tenant_id" = $${bindParams.length + 1}`);
@@ -117,17 +119,15 @@ const list = async (tenantId, query = {}) => {
   }
 
   const whereClause = conditions.join(" AND ");
-  console.log('[PRODUCTS SVC list] whereClause:', whereClause, '| bindParams:', bindParams)
 
   const countResult = await sequelize.query(
     `SELECT COUNT(*) as total FROM "products" AS "Product" WHERE ${whereClause}`,
     { bind: bindParams, type: sequelize.QueryTypes.SELECT },
   );
   const total = parseInt(countResult[0]?.total || "0");
-  console.log('[PRODUCTS SVC list] total count:', total)
 
   if (total === 0) {
-    console.log('[PRODUCTS SVC list] returning empty, total=0')
+    console.log("[PRODUCTS SVC list] returning empty, total=0");
     return { products: [], total: 0, page: Number(page), totalPages: 0 };
   }
 
@@ -143,7 +143,6 @@ const list = async (tenantId, query = {}) => {
     },
   );
   const ids = idResult.map((r) => r.id);
-  console.log('[PRODUCTS SVC list] ids found:', ids)
 
   if (ids.length === 0) {
     return {
@@ -168,13 +167,14 @@ const list = async (tenantId, query = {}) => {
     order: [["created_at", "DESC"]],
   });
 
-  console.log('[PRODUCTS SVC list] products fetched:', products.length, '| names:', products.map(p => p.name))
-
   products.forEach(applyUnitPricing);
 
   const discounts = await getActiveDiscounts(tenantId);
   const productDiscounts = discounts.filter((d) => d.type !== "cart_total");
   products.forEach((p) => resolveProductPricing(p, productDiscounts));
+
+  // Aplicar proxy CDN a todas las imágenes de los productos
+  products.forEach(proxyProductImages);
 
   return {
     products,
@@ -185,22 +185,21 @@ const list = async (tenantId, query = {}) => {
 };
 
 const getBySlug = async (tenantId, slug) => {
-  console.log('[PRODUCTS SVC getBySlug] IN tenantId:', tenantId, '| slug:', slug)
-  
   const product = await Product.findOne({
-    where: { tenantId, slug, status: 'active' },
+    where: { tenantId, slug, status: "active" },
     include: [
-      { model: Category, as: 'category', attributes: ['id', 'name', 'slug'] },
+      { model: Category, as: "category", attributes: ["id", "name", "slug"] },
       skuInclude,
-      { model: TagValue, as: 'tagValues', include: [{ model: Tag, as: 'tag' }] },
+      {
+        model: TagValue,
+        as: "tagValues",
+        include: [{ model: Tag, as: "tag" }],
+      },
     ],
   });
-  
-  console.log('[PRODUCTS SVC getBySlug] product from DB:', product?.id, product?.name, '| description length:', product?.description?.length)
 
   if (!product) {
-    console.log('[PRODUCTS SVC getBySlug] NOT FOUND, throwing 404')
-    throw Object.assign(new Error('Producto no encontrado'), { status: 404 });
+    throw Object.assign(new Error("Producto no encontrado"), { status: 404 });
   }
   applyUnitPricing(product);
 
@@ -208,16 +207,20 @@ const getBySlug = async (tenantId, slug) => {
   const productDiscounts = discounts.filter((d) => d.type !== "cart_total");
   resolveProductPricing(product, productDiscounts);
 
-  console.log('[PRODUCTS SVC getBySlug] running sanitizeDescription on description length:', product.description?.length)
+  // Aplicar proxy CDN a las imágenes del producto individual
+  proxyProductImages(product);
+
   try {
     product.description = sanitizeDescription(product.description);
-    console.log('[PRODUCTS SVC getBySlug] sanitizeDescription OK')
   } catch (sanitizeErr) {
-    console.error('[PRODUCTS SVC getBySlug] sanitizeDescription ERROR:', sanitizeErr.message, sanitizeErr.stack)
-    product.description = product.description || '';
+    console.error(
+      "[PRODUCTS SVC getBySlug] sanitizeDescription ERROR:",
+      sanitizeErr.message,
+      sanitizeErr.stack,
+    );
+    product.description = product.description || "";
   }
-  
-  console.log('[PRODUCTS SVC getBySlug] DONE, returning product')
+
   return product;
 };
 

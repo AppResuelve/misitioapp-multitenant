@@ -1,17 +1,18 @@
 export const INITIAL_GENERAL_SETTINGS = {
-  business_name: "",
-  business_slogan: "",
-  business_description: "",
-  logo_url: "",
-  favicon_url: "",
+  businessName: "",
+  businessSlogan: "",
+  businessDescription: "",
+  logoUrl: "",
+  faviconUrl: "",
   email: "",
-  // Redes:
-  instagram: "",
-  facebook: "",
-  tiktok: "",
-  youtube: "",
-  twitter: "",
-  linkedin: "",
+  socialLinks: {
+    instagram: "",
+    facebook: "",
+    tiktok: "",
+    youtube: "",
+    twitter: "",
+    linkedin: "",
+  },
 };
 
 export type SocialNetworkKey =
@@ -55,7 +56,6 @@ export const SOCIAL_NETWORKS_DICT: Record<SocialNetworkKey, SocialNetworkMeta> =
     },
   };
 
-// Lista que define el orden de aparición en la interfaz
 export const SOCIAL_NETWORK_KEYS = Object.keys(
   SOCIAL_NETWORKS_DICT,
 ) as SocialNetworkKey[];

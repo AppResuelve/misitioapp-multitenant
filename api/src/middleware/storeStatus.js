@@ -24,11 +24,9 @@ const storeStatus = async (req, res, next) => {
       });
     }
 
-    // 2. Chequeo de Estado Operativo de la Tienda (Draft, Maintenance, etc.)
-    const row = await StoreSetting.findOne({
-      where: { tenantId, key: "store_status" },
-    });
-    const status = row?.value || "active";
+    // 2. Chequeo de Estado Operativo de la Tienda aprovechando el getSettings con el cache(Draft, Maintenance, etc.)
+    const settings = await settingsService.getSettings(tenantId);
+    const status = settings?.storeStatus || "active";
 
     if (status === "draft") {
       return res.status(503).json({

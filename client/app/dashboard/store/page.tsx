@@ -38,7 +38,7 @@ export default function Store() {
     api
       .get("/admin/settings")
       .then(({ data }) => {
-        if (data.store_status) setStatus(data.store_status);
+        if (data.storeStatus) setStatus(data.storeStatus);
         if (data.domain) setDomain(data.domain);
       })
       .catch(() => {});
@@ -68,7 +68,7 @@ export default function Store() {
     setSaving(true);
 
     try {
-      await api.put("/admin/settings", { store_status: newStatus });
+      await api.put("/admin/settings", { storeStatus: newStatus });
       setIframeKey((k) => k + 1);
       Alert.fire({
         message: STORE_MESSAGES.STATUS_UPDATED,
