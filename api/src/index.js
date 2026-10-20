@@ -3,6 +3,7 @@ const app = require("./app");
 const { sequelize } = require("./models");
 const { validateEnv } = require("./config/env.schema");
 const { runBillingCron } = require("./cron/billingCron");
+const { fillMissingSkusOnce } = require("./utils/onlyOnceFunction");
 
 const PORT = process.env.PORT || 3001;
 
@@ -17,6 +18,8 @@ const start = async () => {
       console.log(`Servidor corriendo en puerto ${PORT}`);
     });
 
+    // Ejecutamos la migración en segundo plano al iniciar
+    await fillMissingSkusOnce();
     // Programar el control nocturno de facturación a las 03:00 AM
     const billingTask = cron.schedule("0 3 * * *", async () => {
       console.log("[cron] Iniciando control de facturación diario...");

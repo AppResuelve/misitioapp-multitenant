@@ -8,6 +8,9 @@ export function triggerBlobDownload(blob: Blob, filename: string): void {
   document.body.appendChild(a);
   a.click();
 
-  window.URL.revokeObjectURL(url);
-  document.body.removeChild(a);
+  // Se remueve el elemento y se revoca la URL después de que el navegador inicia la descarga
+  setTimeout(() => {
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  }, 100);
 }

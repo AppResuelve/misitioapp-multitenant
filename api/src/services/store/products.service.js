@@ -127,7 +127,6 @@ const list = async (tenantId, query = {}) => {
   const total = parseInt(countResult[0]?.total || "0");
 
   if (total === 0) {
-    console.log("[PRODUCTS SVC list] returning empty, total=0");
     return { products: [], total: 0, page: Number(page), totalPages: 0 };
   }
 

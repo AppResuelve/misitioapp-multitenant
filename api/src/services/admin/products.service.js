@@ -9,10 +9,12 @@ const {
   sequelize,
 } = require("../../models");
 const { Op, QueryTypes } = require("sequelize");
+const XLSX = require("xlsx");
 
-const { resolveDiscountFields } = require('../../utils/discount')
-const { generateSkuCode } = require('../../utils/skuGenerator')
-const { applyUnitPricing } = require('../../utils/unitPricing')
+const { resolveDiscountFields } = require("../../utils/discount");
+const { generateSkuCode } = require("../../utils/skuGenerator");
+const { applyUnitPricing } = require("../../utils/unitPricing");
+const { resolveTagValueIds } = require("../../utils/resolveTagValueIds");
 
 const skuInclude = {
   model: ProductSku,
@@ -40,7 +42,9 @@ const list = async (tenantId, query = {}) => {
     bindParams.push(tenantId);
   }
   if (search) {
-    conditions.push(`("Product"."name" ILIKE $${bindParams.length + 1} OR "Product"."description" ILIKE $${bindParams.length + 1})`);
+    conditions.push(
+      `("Product"."name" ILIKE $${bindParams.length + 1} OR "Product"."description" ILIKE $${bindParams.length + 1})`,
+    );
     bindParams.push(`%${search}%`);
   }
   if (categoryId) {
@@ -52,17 +56,19 @@ const list = async (tenantId, query = {}) => {
     bindParams.push(status);
   }
   if (tagId) {
-    conditions.push(`"Product"."id" IN (SELECT "product_id" FROM "product_tags" WHERE "tag_value_id" = $${bindParams.length + 1})`);
+    conditions.push(
+      `"Product"."id" IN (SELECT "product_id" FROM "product_tags" WHERE "tag_value_id" = $${bindParams.length + 1})`,
+    );
     bindParams.push(Number(tagId));
   }
 
-  const whereClause = conditions.join(' AND ');
+  const whereClause = conditions.join(" AND ");
 
   const countResult = await sequelize.query(
     `SELECT COUNT(*) as total FROM "products" AS "Product" WHERE ${whereClause}`,
-    { bind: bindParams, type: QueryTypes.SELECT }
+    { bind: bindParams, type: QueryTypes.SELECT },
   );
-  const total = parseInt(countResult[0]?.total || '0');
+  const total = parseInt(countResult[0]?.total || "0");
 
   if (total === 0) {
     return { products: [], total: 0, page: Number(page), totalPages: 0 };
@@ -70,21 +76,30 @@ const list = async (tenantId, query = {}) => {
 
   const idResult = await sequelize.query(
     `SELECT "Product"."id" FROM "products" AS "Product" WHERE ${whereClause} ORDER BY "Product"."name" ASC LIMIT $${bindParams.length + 1} OFFSET $${bindParams.length + 2}`,
-    { bind: [...bindParams, Number(limit), offset], type: QueryTypes.SELECT }
+    { bind: [...bindParams, Number(limit), offset], type: QueryTypes.SELECT },
   );
   const ids = idResult.map((r) => r.id);
 
-  const products = ids.length === 0
-    ? []
-    : await Product.findAll({
-        where: { id: { [Op.in]: ids } },
-        include: [
-          { model: Category, as: "category", attributes: ["id", "name", "slug"] },
-          skuInclude,
-          { model: TagValue, as: "tagValues", include: [{ model: Tag, as: "tag" }] },
-        ],
-        order: [["name", "ASC"]],
-      });
+  const products =
+    ids.length === 0
+      ? []
+      : await Product.findAll({
+          where: { id: { [Op.in]: ids } },
+          include: [
+            {
+              model: Category,
+              as: "category",
+              attributes: ["id", "name", "slug"],
+            },
+            skuInclude,
+            {
+              model: TagValue,
+              as: "tagValues",
+              include: [{ model: Tag, as: "tag" }],
+            },
+          ],
+          order: [["name", "ASC"]],
+        });
 
   products.forEach(applyUnitPricing);
 
@@ -97,7 +112,7 @@ const list = async (tenantId, query = {}) => {
 };
 
 const getById = async (tenantId, id) => {
-  const numericId = Number(id)
+  const numericId = Number(id);
   if (!Number.isInteger(numericId) || numericId <= 0) {
     throw Object.assign(new Error("ID de producto inválido"), { status: 400 });
   }
@@ -106,7 +121,11 @@ const getById = async (tenantId, id) => {
     include: [
       { model: Category, as: "category", attributes: ["id", "name", "slug"] },
       skuInclude,
-      { model: TagValue, as: "tagValues", include: [{ model: Tag, as: "tag" }] },
+      {
+        model: TagValue,
+        as: "tagValues",
+        include: [{ model: Tag, as: "tag" }],
+      },
     ],
   });
   if (!product) {
@@ -117,16 +136,24 @@ const getById = async (tenantId, id) => {
 };
 
 const applySyncPrices = (product, skus) => {
-  const activeSkus = skus.filter(s => s.status !== 'draft')
-  if (activeSkus.length === 0) return
-  const retailPrices = activeSkus.map(s => Number(s.retailPrice)).filter(p => p > 0)
-  if (retailPrices.length) product.retailPrice = Math.min(...retailPrices)
-  const wholesalePrices = activeSkus.filter(s => Number(s.wholesalePrice) > 0)
+  const activeSkus = skus.filter((s) => s.status !== "draft");
+  if (activeSkus.length === 0) return;
+  const retailPrices = activeSkus
+    .map((s) => Number(s.retailPrice))
+    .filter((p) => p > 0);
+  if (retailPrices.length) product.retailPrice = Math.min(...retailPrices);
+  const wholesalePrices = activeSkus.filter(
+    (s) => Number(s.wholesalePrice) > 0,
+  );
   if (wholesalePrices.length) {
-    product.wholesalePrice = Math.min(...wholesalePrices.map(s => Number(s.wholesalePrice)))
-    product.wholesaleMinQty = Math.max(...wholesalePrices.map(s => Number(s.wholesaleMinQty) || 1))
+    product.wholesalePrice = Math.min(
+      ...wholesalePrices.map((s) => Number(s.wholesalePrice)),
+    );
+    product.wholesaleMinQty = Math.max(
+      ...wholesalePrices.map((s) => Number(s.wholesaleMinQty) || 1),
+    );
   }
-}
+};
 
 const slugify = (text) => {
   return text
@@ -136,14 +163,21 @@ const slugify = (text) => {
     .substring(0, 255);
 };
 
-const syncSkus = async (tenantId, productId, skus = [], basePrices, transaction) => {
+const syncSkus = async (
+  tenantId,
+  productId,
+  skus = [],
+  basePrices,
+  transaction,
+) => {
   const skuIds = [];
 
   for (const s of skus) {
     const skuData = {
       tenantId,
       productId: productId,
-      retailPrice: s.retailPrice != null ? s.retailPrice : (basePrices?.retailPrice ?? 0),
+      retailPrice:
+        s.retailPrice != null ? s.retailPrice : (basePrices?.retailPrice ?? 0),
       wholesalePrice: s.wholesalePrice ?? basePrices?.wholesalePrice ?? null,
       wholesaleMinQty: s.wholesaleMinQty ?? basePrices?.wholesaleMinQty ?? null,
       stock: s.stock ?? 0,
@@ -155,7 +189,10 @@ const syncSkus = async (tenantId, productId, skus = [], basePrices, transaction)
 
     let sku;
     if (s.id) {
-      sku = await ProductSku.findOne({ where: { tenantId, id: s.id }, transaction });
+      sku = await ProductSku.findOne({
+        where: { tenantId, id: s.id },
+        transaction,
+      });
       if (sku && sku.productId === productId) {
         await sku.update(skuData, { transaction });
       } else {
@@ -187,7 +224,11 @@ const syncSkus = async (tenantId, productId, skus = [], basePrices, transaction)
   }
 
   await ProductSku.destroy({
-    where: { tenantId, productId, id: { [require("sequelize").Op.notIn]: skuIds } },
+    where: {
+      tenantId,
+      productId,
+      id: { [require("sequelize").Op.notIn]: skuIds },
+    },
     transaction,
   });
 };
@@ -198,9 +239,13 @@ const create = async (tenantId, data) => {
   }
 
   if (data.slug) {
-    const existing = await Product.findOne({ where: { tenantId, slug: data.slug } });
+    const existing = await Product.findOne({
+      where: { tenantId, slug: data.slug },
+    });
     if (existing) {
-      throw Object.assign(new Error('Ya existe un producto con ese slug'), { status: 400 });
+      throw Object.assign(new Error("Ya existe un producto con ese slug"), {
+        status: 400,
+      });
     }
   }
 
@@ -215,29 +260,41 @@ const create = async (tenantId, data) => {
   const { skus, tagIds, stock, ...productData } = data;
 
   const result = await sequelize.transaction(async (t) => {
-    const product = await Product.create({ ...productData, tenantId }, { transaction: t });
+    const product = await Product.create(
+      { ...productData, tenantId },
+      { transaction: t },
+    );
     if (tagIds && tagIds.length > 0) {
       await product.setTagValues(tagIds, { transaction: t });
     }
     if (skus && skus.length > 0) {
-      const basePrices = { retailPrice: product.retailPrice, wholesalePrice: product.wholesalePrice, wholesaleMinQty: product.wholesaleMinQty }
+      const basePrices = {
+        retailPrice: product.retailPrice,
+        wholesalePrice: product.wholesalePrice,
+        wholesaleMinQty: product.wholesaleMinQty,
+      };
       await syncSkus(tenantId, product.id, skus, basePrices, t);
-      const allAttrIds = skus.flatMap(s => s.attributeValueIds || []).filter(Boolean)
-      let hasUnitType = false
+      const allAttrIds = skus
+        .flatMap((s) => s.attributeValueIds || [])
+        .filter(Boolean);
+      let hasUnitType = false;
       if (allAttrIds.length > 0) {
         const vals = await AttributeValue.findAll({
           where: { tenantId, id: { [Op.in]: allAttrIds } },
-          include: [{ model: Attribute, as: 'attribute', attributes: ['unitType'] }],
-          transaction: t
-        })
-        hasUnitType = vals.some(v => v.attribute?.unitType)
+          include: [
+            { model: Attribute, as: "attribute", attributes: ["unitType"] },
+          ],
+          transaction: t,
+        });
+        hasUnitType = vals.some((v) => v.attribute?.unitType);
       }
       if (!hasUnitType) {
-        applySyncPrices(product, skus)
-        await product.save({ transaction: t })
+        applySyncPrices(product, skus);
+        await product.save({ transaction: t });
       }
     } else {
       // Producto simple: crear/actualizar SKU base
+      const generatedSku = generateSkuCode(product.name, [], []);
       const [baseSku] = await ProductSku.findOrCreate({
         where: { tenantId, productId: product.id },
         defaults: {
@@ -246,20 +303,27 @@ const create = async (tenantId, data) => {
           retailPrice: product.retailPrice || 0,
           wholesalePrice: product.wholesalePrice,
           wholesaleMinQty: product.wholesaleMinQty,
-          stock: stock != null ? Number(stock) : 0, sku: null, images: [], sortOrder: 0, status: 'active',
+          stock: stock != null ? Number(stock) : 0,
+          sku: generatedSku,
+          images: [],
+          sortOrder: 0,
+          status: "active",
         },
         transaction: t,
-      })
+      });
       if (!baseSku._options?.isNewRecord) {
-        await baseSku.update({
-          retailPrice: product.retailPrice || 0,
-          wholesalePrice: product.wholesalePrice,
-          wholesaleMinQty: product.wholesaleMinQty,
-          ...(stock != null && { stock: Number(stock) }),
-        }, { transaction: t })
+        await baseSku.update(
+          {
+            retailPrice: product.retailPrice || 0,
+            wholesalePrice: product.wholesalePrice,
+            wholesaleMinQty: product.wholesaleMinQty,
+            ...(stock != null && { stock: Number(stock) }),
+          },
+          { transaction: t },
+        );
       }
       // Asegurar que no tenga attributeValues (es base)
-      await baseSku.setAttributeValues([], { transaction: t })
+      await baseSku.setAttributeValues([], { transaction: t });
     }
     return Product.findOne({
       where: { tenantId, id: product.id },
@@ -278,9 +342,13 @@ const update = async (tenantId, id, data) => {
   }
 
   if (data.slug && data.slug !== product.slug) {
-    const existing = await Product.findOne({ where: { tenantId, slug: data.slug } })
+    const existing = await Product.findOne({
+      where: { tenantId, slug: data.slug },
+    });
     if (existing && existing.id !== product.id) {
-      throw Object.assign(new Error('Ya existe un producto con ese slug'), { status: 400 })
+      throw Object.assign(new Error("Ya existe un producto con ese slug"), {
+        status: 400,
+      });
     }
   }
 
@@ -300,39 +368,57 @@ const update = async (tenantId, id, data) => {
       await product.setTagValues(tagIds, { transaction: t });
     }
     if (skus && skus.length > 0) {
-      const basePrices = { retailPrice: product.retailPrice, wholesalePrice: product.wholesalePrice, wholesaleMinQty: product.wholesaleMinQty }
+      const basePrices = {
+        retailPrice: product.retailPrice,
+        wholesalePrice: product.wholesalePrice,
+        wholesaleMinQty: product.wholesaleMinQty,
+      };
       await syncSkus(tenantId, product.id, skus, basePrices, t);
-      const allAttrIds = skus.flatMap(s => s.attributeValueIds || []).filter(Boolean)
-      let hasUnitType = false
+      const allAttrIds = skus
+        .flatMap((s) => s.attributeValueIds || [])
+        .filter(Boolean);
+      let hasUnitType = false;
       if (allAttrIds.length > 0) {
         const vals = await AttributeValue.findAll({
           where: { tenantId, id: allAttrIds },
-          include: [{ model: Attribute, as: 'attribute', attributes: ['unitType'] }],
-          transaction: t
-        })
-        hasUnitType = vals.some(v => v.attribute?.unitType)
+          include: [
+            { model: Attribute, as: "attribute", attributes: ["unitType"] },
+          ],
+          transaction: t,
+        });
+        hasUnitType = vals.some((v) => v.attribute?.unitType);
       }
       if (!hasUnitType) {
-        applySyncPrices(product, skus)
-        await product.save({ transaction: t })
+        applySyncPrices(product, skus);
+        await product.save({ transaction: t });
       }
     } else {
       // Producto simple: destruir SKUs viejos (incluye variantes) y crear el SKU base
-      await ProductSku.destroy({ where: { tenantId, productId: product.id }, transaction: t })
-      await ProductSku.create({
-        tenantId,
-        productId: product.id,
-        retailPrice: product.retailPrice || 0,
-        wholesalePrice: product.wholesalePrice,
-        wholesaleMinQty: product.wholesaleMinQty,
-        stock: stock != null ? Number(stock) : 0,
-        sku: null,
-        images: [],
-        sortOrder: 0,
-        status: 'active',
-      }, { transaction: t })
+      await ProductSku.destroy({
+        where: { tenantId, productId: product.id },
+        transaction: t,
+      });
+      await ProductSku.create(
+        {
+          tenantId,
+          productId: product.id,
+          retailPrice: product.retailPrice || 0,
+          wholesalePrice: product.wholesalePrice,
+          wholesaleMinQty: product.wholesaleMinQty,
+          stock: stock != null ? Number(stock) : 0,
+          sku: null,
+          images: [],
+          sortOrder: 0,
+          status: "active",
+        },
+        { transaction: t },
+      );
     }
-    return Product.findOne({ where: { tenantId, id }, include: [skuInclude], transaction: t });
+    return Product.findOne({
+      where: { tenantId, id },
+      include: [skuInclude],
+      transaction: t,
+    });
   });
 
   return result;
@@ -345,7 +431,8 @@ const remove = async (tenantId, id) => {
 
 const toggleStatus = async (tenantId, id, status) => {
   const product = await Product.findOne({ where: { tenantId, id } });
-  if (!product) throw Object.assign(new Error('Producto no encontrado'), { status: 404 });
+  if (!product)
+    throw Object.assign(new Error("Producto no encontrado"), { status: 404 });
   await product.update({ status });
   return product;
 };
@@ -353,578 +440,839 @@ const toggleStatus = async (tenantId, id, status) => {
 const CHUNK = 150;
 
 const bulkCreate = async (tenantId, products, categoryId) => {
-  const hasVariants = products.some(p => p.skus?.length > 0)
+  const hasVariants = products.some((p) => p.skus?.length > 0);
 
   if (!hasVariants) {
     // Fast path: productos simples, bulkCreate
     const existingSlugs = new Set(
-      (await Product.findAll({ where: { tenantId }, attributes: ["slug"] })).map((p) => p.slug),
-    )
-    const used = new Set([...existingSlugs])
-    const warnings = []
+      (
+        await Product.findAll({ where: { tenantId }, attributes: ["slug"] })
+      ).map((p) => p.slug),
+    );
+    const used = new Set([...existingSlugs]);
+    const warnings = [];
 
     const rows = products.map((p) => {
-      const base = p.slug || slugify(p.name)
-      let slug = base
-      let suffix = 97
-      while (used.has(slug)) { slug = `${base}-${String.fromCharCode(suffix)}`; suffix++ }
-      used.add(slug)
-      if (slug !== base) warnings.push({ name: p.name, slug })
-      const retailPrice = Number(p.price) || 0
-      const { comparePrice, discountPercentage } = resolveDiscountFields(retailPrice, p.comparePrice, p.discountPercentage)
+      const base = p.slug || slugify(p.name);
+      let slug = base;
+      let suffix = 97;
+      while (used.has(slug)) {
+        slug = `${base}-${String.fromCharCode(suffix)}`;
+        suffix++;
+      }
+      used.add(slug);
+      if (slug !== base) warnings.push({ name: p.name, slug });
+      const retailPrice = Number(p.price) || 0;
+      const { comparePrice, discountPercentage } = resolveDiscountFields(
+        retailPrice,
+        p.comparePrice,
+        p.discountPercentage,
+      );
       return {
-        tenantId, name: p.name, slug, retailPrice, status: "draft", categoryId: categoryId || null,
-        ...(p.description != null && p.description !== "" && { description: String(p.description) }),
+        tenantId,
+        name: p.name,
+        slug,
+        retailPrice,
+        status: "draft",
+        categoryId: categoryId || null,
+        ...(p.description != null &&
+          p.description !== "" && { description: String(p.description) }),
         ...(discountPercentage != null && { discountPercentage }),
         ...(comparePrice != null && { comparePrice }),
-        ...(p.wholesalePrice != null && p.wholesalePrice !== "" && { wholesalePrice: Number(p.wholesalePrice) }),
-        ...(p.wholesaleMinQty != null && p.wholesaleMinQty !== "" && { wholesaleMinQty: Number(p.wholesaleMinQty) }),
-        ...(p.images && { images: Array.isArray(p.images) ? p.images : [p.images] }),
-      }
-    })
+        ...(p.wholesalePrice != null &&
+          p.wholesalePrice !== "" && {
+            wholesalePrice: Number(p.wholesalePrice),
+          }),
+        ...(p.wholesaleMinQty != null &&
+          p.wholesaleMinQty !== "" && {
+            wholesaleMinQty: Number(p.wholesaleMinQty),
+          }),
+        ...(p.tags && { tags: Array.isArray(p.tags) ? p.tags : [p.tags] }),
+        ...(p.images && {
+          images: Array.isArray(p.images) ? p.images : [p.images],
+        }),
+      };
+    });
 
-    const t = await sequelize.transaction()
+    const t = await sequelize.transaction();
     try {
       for (let i = 0; i < rows.length; i += CHUNK) {
-        const chunk = rows.slice(i, i + CHUNK)
-        const chunkProducts = products.slice(i, i + CHUNK)
-        const created = await Product.bulkCreate(chunk, { validate: true, transaction: t })
-        await ProductSku.bulkCreate(created.map((p, idx) => ({
-          tenantId,
-          productId: p.id, retailPrice: p.retailPrice || 0,
-          wholesalePrice: p.wholesalePrice || null, wholesaleMinQty: p.wholesaleMinQty || null,
-          stock: chunkProducts[idx]?.stock ?? 0, sku: chunkProducts[idx]?.sku || null, images: [], sortOrder: 0, status: "active",
-        })), { transaction: t })
+        const chunk = rows.slice(i, i + CHUNK);
+        const chunkProducts = products.slice(i, i + CHUNK);
+        const created = await Product.bulkCreate(chunk, {
+          validate: true,
+          returning: true,
+          transaction: t,
+        });
+        await ProductSku.bulkCreate(
+          created.map((p, idx) => ({
+            tenantId,
+            productId: p.id,
+            retailPrice: p.retailPrice || 0,
+            wholesalePrice: p.wholesalePrice || null,
+            wholesaleMinQty: p.wholesaleMinQty || null,
+            stock: chunkProducts[idx]?.stock ?? 0,
+            sku: chunkProducts[idx]?.sku || generateSkuCode(p.name, [], []),
+            images: [],
+            sortOrder: 0,
+            status: "active",
+          })),
+          { transaction: t },
+        );
+
+        for (let j = 0; j < created.length; j++) {
+          const sourceProduct = chunkProducts[j];
+          if (sourceProduct.tags && sourceProduct.tags.length > 0) {
+            const tagValueIds = await resolveTagValueIds(
+              tenantId,
+              sourceProduct.tags,
+              t,
+            );
+
+            if (tagValueIds.length > 0) {
+              await created[j].setTagValues(tagValueIds, { transaction: t });
+            }
+          }
+        }
       }
-      await t.commit()
-    } catch (err) { await t.rollback(); throw err }
-    return { created: rows.length, warnings, createdAttributes: [] }
+      await t.commit();
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
+    return { created: rows.length, warnings, createdAttributes: [] };
   }
 
   // Slow path: productos con variantes, create individual + findOrCreate attributes
-  const existingSlugs = new Set((await Product.findAll({ where: { tenantId }, attributes: ["slug"] })).map((p) => p.slug))
-  const used = new Set([...existingSlugs])
-  const warnings = []
-  const createdAttributes = []
-  let createdCount = 0
+  const existingSlugs = new Set(
+    (await Product.findAll({ where: { tenantId }, attributes: ["slug"] })).map(
+      (p) => p.slug,
+    ),
+  );
+  const used = new Set([...existingSlugs]);
+  const warnings = [];
+  const createdAttributes = [];
+  let createdCount = 0;
 
-  const t = await sequelize.transaction()
+  const t = await sequelize.transaction();
   try {
     for (const p of products) {
       // Slug
-      const base = p.slug || slugify(p.name)
-      let slug = base
-      let suffix = 97
-      while (used.has(slug)) { slug = `${base}-${String.fromCharCode(suffix)}`; suffix++ }
-      used.add(slug)
-      if (slug !== base) warnings.push({ name: p.name, slug })
+      const base = p.slug || slugify(p.name);
+      let slug = base;
+      let suffix = 97;
+      while (used.has(slug)) {
+        slug = `${base}-${String.fromCharCode(suffix)}`;
+        suffix++;
+      }
+      used.add(slug);
+      if (slug !== base) warnings.push({ name: p.name, slug });
 
-      const retailPrice = Number(p.price) || 0
-      const { comparePrice, discountPercentage } = resolveDiscountFields(retailPrice, p.comparePrice, p.discountPercentage)
+      const retailPrice = Number(p.price) || 0;
+      const { comparePrice, discountPercentage } = resolveDiscountFields(
+        retailPrice,
+        p.comparePrice,
+        p.discountPercentage,
+      );
 
       const productData = {
-        tenantId, name: p.name, slug, retailPrice, status: "draft", categoryId: categoryId || null,
-        ...(p.description != null && p.description !== "" && { description: String(p.description) }),
+        tenantId,
+        name: p.name,
+        slug,
+        retailPrice,
+        status: "draft",
+        categoryId: categoryId || null,
+        ...(p.description != null &&
+          p.description !== "" && { description: String(p.description) }),
         ...(discountPercentage != null && { discountPercentage }),
         ...(comparePrice != null && { comparePrice }),
-        ...(p.wholesalePrice != null && p.wholesalePrice !== "" && { wholesalePrice: Number(p.wholesalePrice) }),
-        ...(p.wholesaleMinQty != null && p.wholesaleMinQty !== "" && { wholesaleMinQty: Number(p.wholesaleMinQty) }),
-        ...(p.images && { images: Array.isArray(p.images) ? p.images : [p.images] }),
-      }
-      const product = await Product.create(productData, { transaction: t })
-      createdCount++
+        ...(p.wholesalePrice != null &&
+          p.wholesalePrice !== "" && {
+            wholesalePrice: Number(p.wholesalePrice),
+          }),
+        ...(p.wholesaleMinQty != null &&
+          p.wholesaleMinQty !== "" && {
+            wholesaleMinQty: Number(p.wholesaleMinQty),
+          }),
+        ...(p.images && {
+          images: Array.isArray(p.images) ? p.images : [p.images],
+        }),
+      };
+      const product = await Product.create(productData, { transaction: t });
+      createdCount++;
 
-      const basePrices = { retailPrice, wholesalePrice: productData.wholesalePrice, wholesaleMinQty: productData.wholesaleMinQty }
+      if (p.tags && p.tags.length > 0) {
+        const tagValueIds = await resolveTagValueIds(tenantId, p.tags, t);
+
+        if (tagValueIds.length > 0) {
+          await product.setTagValues(tagValueIds, { transaction: t });
+        }
+      }
+
+      const basePrices = {
+        retailPrice,
+        wholesalePrice: productData.wholesalePrice,
+        wholesaleMinQty: productData.wholesaleMinQty,
+      };
 
       if (p.skus?.length > 0) {
         // Build resolvedAttributes for SKU code generation
-        const resolvedAttributes = []
-        const skuList = []
-        const allAttrIds = []
+        const resolvedAttributes = [];
+        const skuList = [];
+        const allAttrIds = [];
         for (const sku of p.skus) {
-          const attributeValueIds = []
+          const attributeValueIds = [];
           if (sku.attrValues?.length > 0) {
             for (const { attrName, value } of sku.attrValues) {
               const [attr, attrCreated] = await Attribute.findOrCreate({
-                where: { tenantId, name: { [require('sequelize').Op.iLike]: attrName } },
+                where: {
+                  tenantId,
+                  name: { [require("sequelize").Op.iLike]: attrName },
+                },
                 defaults: { tenantId, name: attrName, sortOrder: 0 },
                 transaction: t,
-              })
+              });
               if (attrCreated && !createdAttributes.includes(attr.name)) {
-                createdAttributes.push(attr.name)
+                createdAttributes.push(attr.name);
               }
               const [attrValue] = await AttributeValue.findOrCreate({
-                where: { tenantId, attributeId: attr.id, value: { [require('sequelize').Op.iLike]: value } },
-                defaults: { tenantId, attributeId: attr.id, value, sortOrder: 0 },
+                where: {
+                  tenantId,
+                  attributeId: attr.id,
+                  value: { [require("sequelize").Op.iLike]: value },
+                },
+                defaults: {
+                  tenantId,
+                  attributeId: attr.id,
+                  value,
+                  sortOrder: 0,
+                },
                 transaction: t,
-              })
-              attributeValueIds.push(attrValue.id)
+              });
+              attributeValueIds.push(attrValue.id);
               // Track for SKU code generation
-              let resolved = resolvedAttributes.find(a => a.id === attr.id)
-              if (!resolved) { resolved = { id: attr.id, name: attr.name, values: [] }; resolvedAttributes.push(resolved) }
-              if (!resolved.values.find(v => v.id === attrValue.id)) resolved.values.push({ id: attrValue.id, value: attrValue.value })
+              let resolved = resolvedAttributes.find((a) => a.id === attr.id);
+              if (!resolved) {
+                resolved = { id: attr.id, name: attr.name, values: [] };
+                resolvedAttributes.push(resolved);
+              }
+              if (!resolved.values.find((v) => v.id === attrValue.id))
+                resolved.values.push({
+                  id: attrValue.id,
+                  value: attrValue.value,
+                });
             }
           }
-          allAttrIds.push(...attributeValueIds)
+          allAttrIds.push(...attributeValueIds);
           skuList.push({
-            retailPrice: sku.retailPrice != null ? sku.retailPrice : retailPrice,
+            retailPrice:
+              sku.retailPrice != null ? sku.retailPrice : retailPrice,
             wholesalePrice: sku.wholesalePrice ?? basePrices.wholesalePrice,
             wholesaleMinQty: sku.wholesaleMinQty ?? basePrices.wholesaleMinQty,
             stock: sku.stock || 0,
-            sku: sku.sku?.trim() || (attributeValueIds.length > 0 ? generateSkuCode(product.name, attributeValueIds, resolvedAttributes) : null),
+            sku:
+              sku.sku?.trim() ||
+              (attributeValueIds.length > 0
+                ? generateSkuCode(
+                    product.name,
+                    attributeValueIds,
+                    resolvedAttributes,
+                  )
+                : null),
             images: sku.images || [],
             sortOrder: sku.sortOrder || 0,
-            status: sku.status || 'active',
+            status: sku.status || "active",
             attributeValueIds,
-          })
+          });
         }
-        await syncSkus(tenantId, product.id, skuList, basePrices, t)
+        await syncSkus(tenantId, product.id, skuList, basePrices, t);
 
-        let hasUnitType = false
+        let hasUnitType = false;
         if (allAttrIds.length > 0) {
           const vals = await AttributeValue.findAll({
             where: { tenantId, id: allAttrIds },
-            include: [{ model: Attribute, as: 'attribute', attributes: ['unitType'] }],
+            include: [
+              { model: Attribute, as: "attribute", attributes: ["unitType"] },
+            ],
             transaction: t,
-          })
-          hasUnitType = vals.some(v => v.attribute?.unitType)
+          });
+          hasUnitType = vals.some((v) => v.attribute?.unitType);
         }
         if (!hasUnitType) {
-          applySyncPrices(product, skuList)
-          await product.save({ transaction: t })
+          applySyncPrices(product, skuList);
+          await product.save({ transaction: t });
         }
       } else {
         // Producto simple con variantes en el batch → SKU base
-        await ProductSku.create({
-          tenantId,
-          productId: product.id, retailPrice: retailPrice || 0,
-          wholesalePrice: productData.wholesalePrice || null,
-          wholesaleMinQty: productData.wholesaleMinQty || null,
-          stock: p.stock ?? 0, sku: p.sku || null, images: [], sortOrder: 0, status: 'active',
-        }, { transaction: t })
+        await ProductSku.create(
+          {
+            tenantId,
+            productId: product.id,
+            retailPrice: retailPrice || 0,
+            wholesalePrice: productData.wholesalePrice || null,
+            wholesaleMinQty: productData.wholesaleMinQty || null,
+            stock: p.stock ?? 0,
+            sku: p.sku || generateSkuCode(product.name, [], []), // <-- Respeta el Excel si viene, o genera uno
+            images: [],
+            sortOrder: 0,
+            status: "active",
+          },
+          { transaction: t },
+        );
       }
     }
-    await t.commit()
-  } catch (err) { await t.rollback(); throw err }
+    await t.commit();
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
 
-  return { created: createdCount, warnings, createdAttributes }
+  return { created: createdCount, warnings, createdAttributes };
 };
 
 const productHasOnlyUnitAttributes = (product) => {
-  const skus = product.skus || []
-  if (skus.length === 0) return false
+  const skus = product.skus || [];
+  if (skus.length === 0) return false;
   for (const sku of skus) {
     for (const av of sku.attributeValues || []) {
-      if (!av.attribute?.unitType) return false
+      if (!av.attribute?.unitType) return false;
     }
   }
-  return skus.some(s => (s.attributeValues || []).length > 0 && s.attributeValues.some(av => av.attribute?.unitType))
-}
+  return skus.some(
+    (s) =>
+      (s.attributeValues || []).length > 0 &&
+      s.attributeValues.some((av) => av.attribute?.unitType),
+  );
+};
 
 const exportToExcel = async (tenantId) => {
   const products = await Product.findAll({
     where: { tenantId },
-    order: [['name', 'ASC']],
+    order: [["name", "ASC"]],
     include: [
       skuInclude,
-      { model: Category, as: 'category', attributes: ['name'] },
+      { model: Category, as: "category", attributes: ["name"] },
+      {
+        model: TagValue,
+        as: "tagValues",
+        attributes: ["id", "value"],
+        through: { attributes: [] },
+        include: [
+          { model: Tag, as: "tag", attributes: ["id", "name", "color"] },
+        ],
+      },
     ],
-  })
+  });
 
-  let maxAttrs = 0
-  const variantsInfo = []
+  let maxAttrs = 0;
+  const variantsInfo = [];
 
   for (const p of products) {
-    const skus = p.skus || []
-    const allValues = skus.flatMap(s => s.attributeValues || [])
-    const hasSkus = allValues.length > 0
-    const onlyUnit = productHasOnlyUnitAttributes(p)
+    const skus = p.skus || [];
+    const allValues = skus.flatMap((s) => s.attributeValues || []);
+    const isVariant = skus.length > 1 || allValues.length > 0;
 
-    if (hasSkus && !onlyUnit) {
-      const attrNames = [...new Set(allValues.map(av => av.attribute?.name).filter(Boolean))]
-      maxAttrs = Math.max(maxAttrs, attrNames.length)
+    if (isVariant) {
+      const attrNames = [
+        ...new Set(allValues.map((av) => av.attribute?.name).filter(Boolean)),
+      ];
+      maxAttrs = Math.max(maxAttrs, attrNames.length);
       variantsInfo.push({
         product: p,
         isVariant: true,
         skus,
         attrNames,
-      })
+      });
     } else {
       variantsInfo.push({
         product: p,
         isVariant: false,
         sku: skus[0] || null,
-      })
+      });
     }
   }
 
-  const attrHeaders = []
+  const attrHeaders = [];
   for (let i = 1; i <= maxAttrs; i++) {
-    attrHeaders.push(`atributo_${i}`)
-    attrHeaders.push(`valor_${i}`)
+    attrHeaders.push(`atributo_${i}`);
+    attrHeaders.push(`valor_${i}`);
   }
 
   const headers = [
-    'slug', 'nombre', 'categoria', 'precio', 'precio_mayorista',
-    'cantidad_mayorista', 'descuento', 'precio_comparacion',
-    'descripcion', 'stock', 'sku', 'imagen',
+    "slug",
+    "nombre",
+    "categoria",
+    "precio",
+    "precio_mayorista",
+    "cantidad_mayorista",
+    "descuento",
+    "precio_comparacion",
+    "descripcion",
+    "stock",
+    "sku",
+    "tags",
+    "imagenes",
+    "estado",
     ...attrHeaders,
-  ]
+  ];
 
-  const rows = []
+  const rows = [];
 
   for (const info of variantsInfo) {
-    const p = info.product
+    const p = info.product;
+
+    // Normalizar tags relacionales desde p.tagValues
+    const tagStrings = (p.tagValues || []).map((tv) => {
+      const groupName = tv.tag?.name;
+      return groupName ? `${groupName}: ${tv.value}` : tv.value;
+    });
+    const tagsCell = tagStrings.join(", ");
+
+    // Normalizar imágenes base
+    const baseImages = Array.isArray(p.images) ? p.images.join(", ") : "";
 
     if (info.isVariant) {
       for (const s of info.skus) {
-        const avs = s.attributeValues || []
-        const attrMap = {}
+        const avs = s.attributeValues || [];
+        const attrMap = {};
         for (const av of avs) {
-          if (av.attribute?.name) attrMap[av.attribute.name] = av.value
+          if (av.attribute?.name) attrMap[av.attribute.name] = av.value;
         }
+
+        const skuImages =
+          Array.isArray(s.images) && s.images.length > 0
+            ? s.images.join(", ")
+            : baseImages;
 
         const row = [
-          p.slug, p.name, p.category?.name || '',
-          Number(s.retailPrice) || 0, Number(s.wholesalePrice) || '',
-          s.wholesaleMinQty ?? '', p.discountPercentage ?? '',
-          Number(p.comparePrice) || '', p.description || '',
-          s.stock ?? 0, s.sku || '', (s.images?.[0] || ''),
-        ]
+          p.slug,
+          p.name,
+          p.category?.name || "",
+          Number(s.retailPrice) || Number(p.retailPrice) || 0,
+          Number(s.wholesalePrice) || Number(p.wholesalePrice) || "",
+          s.wholesaleMinQty !== null && s.wholesaleMinQty !== undefined
+            ? s.wholesaleMinQty
+            : p.wholesaleMinQty || "",
+          p.discountPercentage || "",
+          Number(p.comparePrice) || "",
+          p.description || "",
+          s.stock !== null && s.stock !== undefined ? s.stock : 0,
+          s.sku || "",
+          tagsCell,
+          skuImages,
+          p.status || "active",
+        ];
 
         for (const attrName of info.attrNames) {
-          row.push(attrName)
-          row.push(attrMap[attrName] || '')
+          row.push(attrName);
+          row.push(attrMap[attrName] || "");
         }
         for (let i = info.attrNames.length; i < maxAttrs; i++) {
-          row.push('', '')
+          row.push("", "");
         }
 
-        rows.push(row)
+        rows.push(row);
       }
     } else {
-      const sku = info.sku
+      const sku = info.sku;
       const row = [
-        p.slug, p.name, p.category?.name || '',
-        Number(p.retailPrice) || 0, Number(p.wholesalePrice) || '',
-        p.wholesaleMinQty ?? '', p.discountPercentage ?? '',
-        Number(p.comparePrice) || '', p.description || '',
-        sku?.stock ?? 0, sku?.sku || '', (p.images?.[0] || ''),
-      ]
+        p.slug,
+        p.name,
+        p.category?.name || "",
+        Number(sku?.retailPrice) || Number(p.retailPrice) || 0,
+        Number(sku?.wholesalePrice) || Number(p.wholesalePrice) || "",
+        sku?.wholesaleMinQty !== null && sku?.wholesaleMinQty !== undefined
+          ? sku?.wholesaleMinQty
+          : p.wholesaleMinQty || "",
+        p.discountPercentage || "",
+        Number(p.comparePrice) || "",
+        p.description || "",
+        sku?.stock !== null && sku?.stock !== undefined ? sku.stock : 0,
+        sku?.sku || "",
+        tagsCell,
+        baseImages,
+        p.status || "active",
+      ];
+
       for (let i = 0; i < maxAttrs; i++) {
-        row.push('', '')
+        row.push("", "");
       }
 
-      rows.push(row)
+      rows.push(row);
     }
   }
 
-  const XLSX = require('xlsx')
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Productos')
-  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
-  return buffer
-}
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Productos");
+  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+};
 
 const FIELD_TO_PRODUCT_KEY = {
-  retailPrice: 'retailPrice',
-  wholesalePrice: 'wholesalePrice',
-  wholesaleMinQty: 'wholesaleMinQty',
-  discountPercentage: 'discountPercentage',
-  comparePrice: 'comparePrice',
-  description: 'description',
-  images: 'images',
-}
+  retailPrice: "retailPrice",
+  wholesalePrice: "wholesalePrice",
+  wholesaleMinQty: "wholesaleMinQty",
+  discountPercentage: "discountPercentage",
+  comparePrice: "comparePrice",
+  description: "description",
+  images: "images",
+};
 
 const FIELD_TO_SKU_KEY = {
-  retailPrice: 'retailPrice',
-  wholesalePrice: 'wholesalePrice',
-  wholesaleMinQty: 'wholesaleMinQty',
-  stock: 'stock',
-  sku: 'sku',
-  images: 'images',
-}
+  retailPrice: "retailPrice",
+  wholesalePrice: "wholesalePrice",
+  wholesaleMinQty: "wholesaleMinQty",
+  stock: "stock",
+  sku: "sku",
+  images: "images",
+};
 
-const STRING_FIELDS = ['description', 'sku']
+const STRING_FIELDS = ["description", "sku"];
 
-const BULK_CHUNK = 1000
+const BULK_CHUNK = 1000;
 
 function normalizeValue(field, val) {
-  if (val == null || val === '') return null
-  if (STRING_FIELDS.includes(field)) return String(val).trim()
-  if (field === 'images') return Array.isArray(val) ? (val[0] || '') : String(val)
-  return Number(val)
+  if (val == null || val === "") return null;
+  if (STRING_FIELDS.includes(field)) return String(val).trim();
+  if (field === "images")
+    return Array.isArray(val) ? val[0] || "" : String(val);
+  return Number(val);
 }
 
 function toDbValue(field, val) {
   if (val == null) {
-    if (field === 'images') return []
-    if (field === 'sku') return null
-    return null
+    if (field === "images") return [];
+    if (field === "sku") return null;
+    return null;
   }
-  if (field === 'images') return Array.isArray(val) ? val : [val]
-  if (STRING_FIELDS.includes(field)) return String(val)
-  return Number(val)
+  if (field === "images") return Array.isArray(val) ? val : [val];
+  if (STRING_FIELDS.includes(field)) return String(val);
+  return Number(val);
 }
 
 function matchSkuByAttrValues(dbSkus, attrValues) {
-  if (!attrValues?.length) return dbSkus?.[0] || null
+  if (!attrValues?.length) return dbSkus?.[0] || null;
   for (const sku of dbSkus || []) {
-    const avs = sku.attributeValues || []
+    const avs = sku.attributeValues || [];
     const match = attrValues.every(({ attrName, value }) =>
-      avs.some(av =>
-        av.attribute?.name?.toLowerCase() === attrName.toLowerCase() &&
-        av.value?.toString().toLowerCase() === value.toString().toLowerCase()
-      )
-    )
-    if (match) return sku
+      avs.some(
+        (av) =>
+          av.attribute?.name?.toLowerCase() === attrName.toLowerCase() &&
+          av.value?.toString().toLowerCase() === value.toString().toLowerCase(),
+      ),
+    );
+    if (match) return sku;
   }
-  return null
+  return null;
 }
 
 function buildProductUpdate(field, newValue, product) {
-  if (field === 'discountPercentage') {
-    const pct = Number(newValue)
+  if (field === "discountPercentage") {
+    const pct = Number(newValue);
     if (!isNaN(pct) && pct > 0) {
       const { comparePrice, discountPercentage } = resolveDiscountFields(
         Number(product.retailPrice) || 0,
         product.comparePrice,
         pct,
-      )
-      return { discountPercentage, comparePrice }
+      );
+      return { discountPercentage, comparePrice };
     }
-    return { discountPercentage: null }
+    return { discountPercentage: null };
   }
-  if (field === 'comparePrice') {
+  if (field === "comparePrice") {
     const { comparePrice } = resolveDiscountFields(
       Number(product.retailPrice) || 0,
       newValue,
       product.discountPercentage,
-    )
-    return { comparePrice }
+    );
+    return { comparePrice };
   }
-  return { [field]: toDbValue(field, newValue) }
+  return { [field]: toDbValue(field, newValue) };
 }
 
 const previewDiff = async (tenantId, field, products) => {
-  const productKey = FIELD_TO_PRODUCT_KEY[field]
-  const skuKey = FIELD_TO_SKU_KEY[field]
+  const productKey = FIELD_TO_PRODUCT_KEY[field];
+  const skuKey = FIELD_TO_SKU_KEY[field];
 
-  const allSlugs = [...new Set(products.map(p => p.slug).filter(Boolean))]
-  const diffs = []
+  const allSlugs = [...new Set(products.map((p) => p.slug).filter(Boolean))];
+  const diffs = [];
 
   for (let i = 0; i < allSlugs.length; i += BULK_CHUNK) {
-    const chunkSlugs = allSlugs.slice(i, i + BULK_CHUNK)
+    const chunkSlugs = allSlugs.slice(i, i + BULK_CHUNK);
     const existing = await Product.findAll({
       where: { tenantId, slug: chunkSlugs },
       include: [skuInclude],
-    })
-    const productMap = {}
-    for (const p of existing) productMap[p.slug] = p
+    });
+    const productMap = {};
+    for (const p of existing) productMap[p.slug] = p;
 
-    const chunkItems = products.filter(p => chunkSlugs.includes(p.slug))
+    const chunkItems = products.filter((p) => chunkSlugs.includes(p.slug));
 
     for (const item of chunkItems) {
-      const product = productMap[item.slug]
-      if (!product) continue
+      const product = productMap[item.slug];
+      if (!product) continue;
 
-      const isUnitType = productHasOnlyUnitAttributes(product)
-      const hasSkuData = item.skus?.length > 0 && !isUnitType
+      const isUnitType = productHasOnlyUnitAttributes(product);
+      const hasSkuData = item.skus?.length > 0 && !isUnitType;
 
       if (hasSkuData) {
-        const skuDiffs = []
+        const skuDiffs = [];
         for (const skuData of item.skus) {
-          const dbSku = matchSkuByAttrValues(product.skus, skuData.attrValues)
-          if (!dbSku) continue
-          if (!skuKey) continue
-          const oldValue = normalizeValue(field, dbSku[skuKey])
-          const newValue = normalizeValue(field, skuData.value)
+          const dbSku = matchSkuByAttrValues(product.skus, skuData.attrValues);
+          if (!dbSku) continue;
+          if (!skuKey) continue;
+          const oldValue = normalizeValue(field, dbSku[skuKey]);
+          const newValue = normalizeValue(field, skuData.value);
           if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
-            skuDiffs.push({ attrValues: skuData.attrValues || [], oldValue, newValue })
+            skuDiffs.push({
+              attrValues: skuData.attrValues || [],
+              oldValue,
+              newValue,
+            });
           }
         }
         if (skuDiffs.length > 0) {
-          diffs.push({ slug: item.slug, name: product.name, skus: skuDiffs })
+          diffs.push({ slug: item.slug, name: product.name, skus: skuDiffs });
         }
       } else {
         const oldValue = productKey
           ? normalizeValue(field, product[productKey])
-          : (skuKey && product.skus?.length ? normalizeValue(field, product.skus[0][skuKey]) : null)
-        const newValue = normalizeValue(field, item.value)
+          : skuKey && product.skus?.length
+            ? normalizeValue(field, product.skus[0][skuKey])
+            : null;
+        const newValue = normalizeValue(field, item.value);
         if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
-          diffs.push({ slug: item.slug, name: product.name, oldValue, newValue })
+          diffs.push({
+            slug: item.slug,
+            name: product.name,
+            oldValue,
+            newValue,
+          });
         }
       }
     }
   }
 
-  return { field, total: products.length, diffs }
-}
+  return { field, total: products.length, diffs };
+};
 
 const bulkUpdate = async (tenantId, field, products) => {
-  const productKey = FIELD_TO_PRODUCT_KEY[field]
-  const skuKey = FIELD_TO_SKU_KEY[field]
+  const productKey = FIELD_TO_PRODUCT_KEY[field];
+  const skuKey = FIELD_TO_SKU_KEY[field];
 
-  const allSlugs = [...new Set(products.map(p => p.slug).filter(Boolean))]
+  const allSlugs = [...new Set(products.map((p) => p.slug).filter(Boolean))];
   if (allSlugs.length === 0) {
-    throw Object.assign(new Error('No se encontraron slugs válidos en los datos'), { status: 400 })
+    throw Object.assign(
+      new Error("No se encontraron slugs válidos en los datos"),
+      { status: 400 },
+    );
   }
 
-  let updated = 0
-  let skipped = 0
-  const warnings = []
+  let updated = 0;
+  let skipped = 0;
+  const warnings = [];
 
   for (let i = 0; i < allSlugs.length; i += BULK_CHUNK) {
-    const chunkSlugs = allSlugs.slice(i, i + BULK_CHUNK)
+    const chunkSlugs = allSlugs.slice(i, i + BULK_CHUNK);
     const existing = await Product.findAll({
       where: { tenantId, slug: chunkSlugs },
       include: [skuInclude],
-    })
-    const productMap = {}
-    for (const p of existing) productMap[p.slug] = p
+    });
+    const productMap = {};
+    for (const p of existing) productMap[p.slug] = p;
 
-    const chunkItems = products.filter(p => chunkSlugs.includes(p.slug))
+    const chunkItems = products.filter((p) => chunkSlugs.includes(p.slug));
 
-    const t = await sequelize.transaction()
+    const t = await sequelize.transaction();
     try {
       for (const item of chunkItems) {
-        const product = productMap[item.slug]
+        const product = productMap[item.slug];
         if (!product) {
-          skipped++
-          warnings.push({ slug: item.slug, reason: 'Producto no encontrado' })
-          continue
+          skipped++;
+          warnings.push({ slug: item.slug, reason: "Producto no encontrado" });
+          continue;
         }
 
-        const isUnitType = productHasOnlyUnitAttributes(product)
-        const hasSkuData = item.skus?.length > 0 && !isUnitType
+        const isUnitType = productHasOnlyUnitAttributes(product);
+        const hasSkuData = item.skus?.length > 0 && !isUnitType;
 
         if (hasSkuData) {
-          let conflict = false
+          let conflict = false;
           for (const skuData of item.skus) {
-            const dbSku = matchSkuByAttrValues(product.skus, skuData.attrValues)
+            const dbSku = matchSkuByAttrValues(
+              product.skus,
+              skuData.attrValues,
+            );
             if (!dbSku) {
-              warnings.push({ slug: item.slug, reason: 'SKU no encontrado (atributos no coinciden)' })
-              conflict = true
-              continue
+              warnings.push({
+                slug: item.slug,
+                reason: "SKU no encontrado (atributos no coinciden)",
+              });
+              conflict = true;
+              continue;
             }
-            if (!skuKey) continue
-            const current = normalizeValue(field, dbSku[skuKey])
-            const oldVal = normalizeValue(field, skuData.oldValue)
+            if (!skuKey) continue;
+            const current = normalizeValue(field, dbSku[skuKey]);
+            const oldVal = normalizeValue(field, skuData.oldValue);
             if (JSON.stringify(current) !== JSON.stringify(oldVal)) {
-              warnings.push({ slug: item.slug, reason: 'El valor fue modificado por otro usuario' })
-              conflict = true
-              continue
+              warnings.push({
+                slug: item.slug,
+                reason: "El valor fue modificado por otro usuario",
+              });
+              conflict = true;
+              continue;
             }
-            await dbSku.update({ [skuKey]: toDbValue(field, skuData.newValue) }, { transaction: t })
+            await dbSku.update(
+              { [skuKey]: toDbValue(field, skuData.newValue) },
+              { transaction: t },
+            );
           }
 
           if (conflict) {
-            skipped++
-            continue
+            skipped++;
+            continue;
           }
 
-          if (productKey && (field === 'retailPrice' || field === 'wholesalePrice' || field === 'wholesaleMinQty')) {
-            applySyncPrices(product, product.skus)
-            await product.save({ transaction: t })
+          if (
+            productKey &&
+            (field === "retailPrice" ||
+              field === "wholesalePrice" ||
+              field === "wholesaleMinQty")
+          ) {
+            applySyncPrices(product, product.skus);
+            await product.save({ transaction: t });
           }
-          updated++
+          updated++;
         } else {
           const current = productKey
             ? normalizeValue(field, product[productKey])
-            : (skuKey && product.skus?.length ? normalizeValue(field, product.skus[0][skuKey]) : null)
-          const oldVal = normalizeValue(field, item.oldValue)
+            : skuKey && product.skus?.length
+              ? normalizeValue(field, product.skus[0][skuKey])
+              : null;
+          const oldVal = normalizeValue(field, item.oldValue);
           if (JSON.stringify(current) !== JSON.stringify(oldVal)) {
-            warnings.push({ slug: item.slug, reason: 'El valor fue modificado por otro usuario' })
-            skipped++
-            continue
+            warnings.push({
+              slug: item.slug,
+              reason: "El valor fue modificado por otro usuario",
+            });
+            skipped++;
+            continue;
           }
 
           if (productKey) {
-            const productUpdates = buildProductUpdate(field, item.newValue, product)
+            const productUpdates = buildProductUpdate(
+              field,
+              item.newValue,
+              product,
+            );
             if (Object.keys(productUpdates).length > 0) {
-              await product.update(productUpdates, { transaction: t })
+              await product.update(productUpdates, { transaction: t });
             }
           }
 
           if (skuKey && product.skus?.length) {
-            await product.skus[0].update({ [skuKey]: toDbValue(field, item.newValue) }, { transaction: t })
+            await product.skus[0].update(
+              { [skuKey]: toDbValue(field, item.newValue) },
+              { transaction: t },
+            );
           }
 
-          updated++
+          updated++;
         }
       }
-      await t.commit()
+      await t.commit();
     } catch (err) {
-      await t.rollback()
-      throw err
+      await t.rollback();
+      throw err;
     }
   }
 
-  return { updated, skipped, warnings }
-}
+  return { updated, skipped, warnings };
+};
 
 const systemUpdate = async (tenantId, field, value, productIds) => {
-  const productKey = FIELD_TO_PRODUCT_KEY[field]
-  const skuKey = FIELD_TO_SKU_KEY[field]
+  const productKey = FIELD_TO_PRODUCT_KEY[field];
+  const skuKey = FIELD_TO_SKU_KEY[field];
 
-  let updated = 0
-  let skipped = 0
-  const warnings = []
+  let updated = 0;
+  let skipped = 0;
+  const warnings = [];
 
   for (let i = 0; i < productIds.length; i += BULK_CHUNK) {
-    const chunkIds = productIds.slice(i, i + BULK_CHUNK)
+    const chunkIds = productIds.slice(i, i + BULK_CHUNK);
     const products = await Product.findAll({
       where: { tenantId, id: chunkIds },
       include: [skuInclude],
-    })
+    });
 
-    const t = await sequelize.transaction()
+    const t = await sequelize.transaction();
     try {
       for (const product of products) {
-        if (field === 'status') {
-          await product.update({ status: value }, { transaction: t })
-          updated++
-          continue
+        if (field === "status") {
+          await product.update({ status: value }, { transaction: t });
+          updated++;
+          continue;
         }
 
-        if (field === 'categoryId') {
-          await product.update({ categoryId: value == null ? null : Number(value) }, { transaction: t })
-          updated++
-          continue
+        if (field === "categoryId") {
+          await product.update(
+            { categoryId: value == null ? null : Number(value) },
+            { transaction: t },
+          );
+          updated++;
+          continue;
         }
 
         const hasRealVariants =
-          (product.skus || []).some(s => (s.attributeValues || []).length > 0) &&
-          !productHasOnlyUnitAttributes(product)
+          (product.skus || []).some(
+            (s) => (s.attributeValues || []).length > 0,
+          ) && !productHasOnlyUnitAttributes(product);
 
         if (hasRealVariants) {
-          skipped++
-          warnings.push({ slug: product.slug, reason: 'Producto con variantes, editar individualmente' })
-          continue
+          skipped++;
+          warnings.push({
+            slug: product.slug,
+            reason: "Producto con variantes, editar individualmente",
+          });
+          continue;
         }
 
         if (productKey) {
-          const updates = buildProductUpdate(field, value, product)
+          const updates = buildProductUpdate(field, value, product);
           if (Object.keys(updates).length > 0) {
-            await product.update(updates, { transaction: t })
+            await product.update(updates, { transaction: t });
           }
         }
 
         if (skuKey && product.skus?.length) {
-          await product.skus[0].update({ [skuKey]: toDbValue(field, value) }, { transaction: t })
+          await product.skus[0].update(
+            { [skuKey]: toDbValue(field, value) },
+            { transaction: t },
+          );
         }
 
-        updated++
+        updated++;
       }
-      await t.commit()
+      await t.commit();
     } catch (err) {
-      await t.rollback()
-      throw err
+      await t.rollback();
+      throw err;
     }
   }
 
-  return { updated, skipped, warnings }
-}
+  return { updated, skipped, warnings };
+};
 
-module.exports = { list, getById, create, update, remove, toggleStatus, bulkCreate, exportToExcel, previewDiff, bulkUpdate, systemUpdate };
+module.exports = {
+  list,
+  getById,
+  create,
+  update,
+  remove,
+  toggleStatus,
+  bulkCreate,
+  exportToExcel,
+  previewDiff,
+  bulkUpdate,
+  systemUpdate,
+};

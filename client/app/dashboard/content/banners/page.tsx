@@ -28,7 +28,6 @@ export default function BannersPage() {
     toggleItemStatus,
     deleteItem,
   } = useSiteContent({ kind: "banner" });
-  console.log(banners);
 
   const Alert = useAlert();
   const [togglingId, setTogglingId] = useState<number | null>(null);

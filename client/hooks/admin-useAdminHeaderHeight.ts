@@ -8,7 +8,6 @@ export function useAdminHeaderHeight(
 ): number {
   const [height, setHeight] = useState<number>(0);
   const el = document.getElementById(elementId);
-  console.log("sdfdsfsdfsdfsfsfs", el);
 
   useEffect(() => {
     if (!el) {
