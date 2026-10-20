@@ -36,13 +36,16 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              try {
-                const t = localStorage.getItem('theme');
-                const dark = t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches);
-                if (dark) document.documentElement.classList.add('dark');
-                else document.documentElement.classList.add('light');
-              } catch (_) {}
-            `,
+        try {
+          const t = localStorage.getItem('theme');
+          const isSystem = !t || t === 'system';
+          const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const isDark = t === 'dark' || (isSystem && systemDark);
+
+          document.documentElement.classList.remove('light', 'dark');
+          document.documentElement.classList.add(isDark ? 'dark' : 'light');
+        } catch (_) {}
+      `,
           }}
         />
       </head>

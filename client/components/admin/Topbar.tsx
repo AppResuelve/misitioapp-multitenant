@@ -1,16 +1,15 @@
 // @ts-nocheck
 "use client";
+
 import { useState } from "react";
-import { Menu, LogOut, Key, Eye, EyeOff } from "lucide-react";
-import { useAuth } from "@/context/AuthContext";
+import { Menu, Eye, EyeOff } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
 import { Modal } from "@/components/ui";
 import api from "@/services/admin-api";
+import { UserMenu } from "./UserMenu";
 
 export default function Topbar({ onMenuOpen, hasBanner = false }) {
-  const { user, logout } = useAuth();
   const Alert = useAlert();
-  const [menuOpen, setMenuOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
   const [pwNew, setPwNew] = useState("");
   const [pwConfirm, setPwConfirm] = useState("");
@@ -62,69 +61,17 @@ export default function Topbar({ onMenuOpen, hasBanner = false }) {
         <button
           type="button"
           onClick={onMenuOpen}
-          className="lg:hidden p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)] transition-colors"
+          className="lg:hidden p-2 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)] transition-colors"
           aria-label="Abrir menú"
         >
-          <Menu className="w-5 h-5" />
+          <Menu className="w-6 h-6" />
         </button>
 
         {/* Spacer for desktop */}
         <div className="hidden lg:block" />
 
-        {/* User menu */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="flex items-center gap-2 p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)] transition-colors border border-transparent hover:border-[var(--color-border)]"
-            title="Menú"
-          >
-            <div className="w-8 h-8 rounded-full bg-[var(--color-bg-elevated)] border border-[var(--color-border)] flex items-center justify-center text-xs font-semibold text-[var(--color-text-primary)]">
-              {user?.name?.[0]?.toUpperCase() || "A"}
-            </div>
-            <span className="hidden sm:block text-sm font-medium text-[var(--color-text-primary)]">
-              {user?.name}
-            </span>
-          </button>
-
-          {menuOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-10"
-                onClick={() => setMenuOpen(false)}
-              />
-              <div className="absolute right-0 top-full mt-2 w-56 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl shadow-xl z-20 p-1.5 transition-all">
-                <div className="px-3 py-2 border-b border-[var(--color-border)] mb-1">
-                  <p className="text-sm font-semibold text-[var(--color-text-primary)] truncate">
-                    {user?.name}
-                  </p>
-                  <p className="text-xs text-[var(--color-text-muted)] truncate">
-                    {user?.email}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setPwOpen(true);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)] transition-colors text-left"
-                >
-                  <Key className="w-4 h-4 text-[var(--color-text-muted)]" />
-                  Cambiar contraseña
-                </button>
-                <button
-                  type="button"
-                  onClick={logout}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors text-left"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Cerrar sesión
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        {/* User menu encapsulado con Dark Mode e Instalación */}
+        <UserMenu onOpenChangePassword={() => setPwOpen(true)} />
       </header>
 
       {/* Change password modal */}

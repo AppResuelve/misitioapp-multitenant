@@ -31,7 +31,6 @@ import {
   Layers,
 } from "lucide-react";
 import { useUnsavedChanges } from "@/context/UnsavedChangesContext";
-import ThemeToggle from "@/components/ui/ThemeToggle";
 
 const NAV_CONFIG = [
   {
@@ -300,10 +299,6 @@ export default function Sidebar({ open, onClose, logoUrl, hasBanner = false }) {
             ))}
           </div>
         )}
-
-        <div className="pt-2">
-          <ThemeToggle mobile={true} />
-        </div>
       </div>
     </>
   );
