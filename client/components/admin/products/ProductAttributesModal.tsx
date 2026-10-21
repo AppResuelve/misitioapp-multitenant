@@ -152,11 +152,15 @@ export default function ProductAttributesModal({
       open={open}
       onClose={onClose}
       title="Administrar atributos"
-      size="lg"
+      size="xl"
     >
       <div className="space-y-4">
         {/* Buscador de atributos no agregados */}
-        {attributes.filter((a) => !modalAttrs[a.id]).length > 0 && (
+        {/* AHORA: Sigue visible si algún atributo no fue agregado O si aún le quedan valores por seleccionar */}
+        {attributes.some((a) => {
+          const selected = modalAttrs[a.id];
+          return !selected || selected.size < a.values.length;
+        }) && (
           <div className="relative" ref={searchDropdownRef}>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)] pointer-events-none" />
