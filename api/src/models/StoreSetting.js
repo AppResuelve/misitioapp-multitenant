@@ -69,7 +69,7 @@ module.exports = (sequelize, DataTypes) => {
         field: "favicon_url",
       },
       socialLinks: {
-        type: DataTypes.JSONB, // Si usás MySQL, podés cambiar a DataTypes.JSON
+        type: DataTypes.JSONB,
         allowNull: false,
         defaultValue: {
           instagram: "",
@@ -79,6 +79,49 @@ module.exports = (sequelize, DataTypes) => {
           whatsapp: "",
         },
         field: "social_links",
+      },
+      // --- Configuración de Catálogo, Precios y Checkout ---
+      autoCalculateUnitPrices: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: "auto_calculate_unit_prices",
+      },
+      allowWholesale: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: "allow_wholesale",
+      },
+      hideOutOfStock: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: "hide_out_of_stock",
+      },
+      trackStock: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: "track_stock",
+      },
+      minOrderAmount: {
+        type: DataTypes.DECIMAL(12, 2),
+        allowNull: true,
+        defaultValue: 0,
+        field: "min_order_amount",
+      },
+      minWholesaleAmount: {
+        type: DataTypes.DECIMAL(12, 2),
+        allowNull: true,
+        defaultValue: 0,
+        field: "min_wholesale_amount",
+      },
+      showPriceWithTax: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: "show_price_with_tax",
       },
     },
     {

@@ -30,7 +30,7 @@ const skuInclude = {
   order: [["sort_order", "ASC"]],
 };
 
-const list = async (tenantId, query = {}) => {
+const list = async (tenantId, query = {}, storeSettings) => {
   const { page = 1, limit = 20, search, categoryId, status, tagId } = query;
   const offset = (page - 1) * limit;
 
@@ -101,7 +101,9 @@ const list = async (tenantId, query = {}) => {
           order: [["name", "ASC"]],
         });
 
-  products.forEach(applyUnitPricing);
+  const autoCalculate = storeSettings?.autoCalculateUnitPrices ?? true;
+
+  products.forEach((product) => applyUnitPricing(product, autoCalculate));
 
   return {
     products,
@@ -111,7 +113,7 @@ const list = async (tenantId, query = {}) => {
   };
 };
 
-const getById = async (tenantId, id) => {
+const getById = async (tenantId, id, storeSettings) => {
   const numericId = Number(id);
   if (!Number.isInteger(numericId) || numericId <= 0) {
     throw Object.assign(new Error("ID de producto inválido"), { status: 400 });
@@ -131,7 +133,9 @@ const getById = async (tenantId, id) => {
   if (!product) {
     throw Object.assign(new Error("Producto no encontrado"), { status: 404 });
   }
-  applyUnitPricing(product);
+  const autoCalculate = storeSettings?.autoCalculateUnitPrices ?? true;
+
+  applyUnitPricing(product, autoCalculate);
   return product;
 };
 
@@ -335,8 +339,8 @@ const create = async (tenantId, data) => {
   return result;
 };
 
-const update = async (tenantId, id, data) => {
-  const product = await getById(tenantId, id);
+const update = async (tenantId, id, data, storeSettings) => {
+  const product = await getById(tenantId, id, storeSettings);
   if (!data.slug && data.name) {
     data.slug = slugify(data.name);
   }

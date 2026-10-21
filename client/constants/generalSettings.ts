@@ -13,6 +13,7 @@ export const INITIAL_GENERAL_SETTINGS = {
     twitter: "",
     linkedin: "",
   },
+  autoCalculateUnitPrices: true,
 };
 
 export type SocialNetworkKey =

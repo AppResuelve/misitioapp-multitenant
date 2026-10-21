@@ -43,7 +43,7 @@ const skuInclude = {
   order: [["sort_order", "ASC"]],
 };
 
-const list = async (tenantId, query = {}) => {
+const list = async (tenantId, query = {}, storeSettings) => {
   const {
     page = 1,
     limit = 50,
@@ -166,7 +166,9 @@ const list = async (tenantId, query = {}) => {
     order: [["created_at", "DESC"]],
   });
 
-  products.forEach(applyUnitPricing);
+  const autoCalculate = storeSettings?.autoCalculateUnitPrices ?? true;
+
+  products.forEach((product) => applyUnitPricing(product, autoCalculate));
 
   const discounts = await getActiveDiscounts(tenantId);
   const productDiscounts = discounts.filter((d) => d.type !== "cart_total");
@@ -183,7 +185,7 @@ const list = async (tenantId, query = {}) => {
   };
 };
 
-const getBySlug = async (tenantId, slug) => {
+const getBySlug = async (tenantId, slug, storeSettings) => {
   const product = await Product.findOne({
     where: { tenantId, slug, status: "active" },
     include: [
@@ -200,7 +202,10 @@ const getBySlug = async (tenantId, slug) => {
   if (!product) {
     throw Object.assign(new Error("Producto no encontrado"), { status: 404 });
   }
-  applyUnitPricing(product);
+
+  const autoCalculate = storeSettings?.autoCalculateUnitPrices ?? true;
+
+  applyUnitPricing(product, autoCalculate);
 
   const discounts = await getActiveDiscounts(tenantId);
   const productDiscounts = discounts.filter((d) => d.type !== "cart_total");

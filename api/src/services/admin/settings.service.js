@@ -19,6 +19,13 @@ const DEFAULTS = {
     tiktok: "",
     youtube: "",
   },
+  autoCalculateUnitPrices: true,
+  allowWholesale: false,
+  hideOutOfStock: false,
+  trackStock: false,
+  minOrderAmount: 0,
+  minWholesaleAmount: 0,
+  showPriceWithTax: false,
 };
 
 const formatWithCdn = (settings) => {
@@ -28,7 +35,11 @@ const formatWithCdn = (settings) => {
   if (raw.logoUrl) raw.logoUrl = proxyAssetUrl(raw.logoUrl);
   if (raw.faviconUrl) raw.faviconUrl = proxyAssetUrl(raw.faviconUrl);
 
-  return raw;
+  // Mezcla los defaults primero y sobreescribe con los valores reales no nulos de la DB
+  return {
+    ...DEFAULTS,
+    ...raw,
+  };
 };
 
 /**
