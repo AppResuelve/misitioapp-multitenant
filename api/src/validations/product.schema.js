@@ -48,6 +48,7 @@ const productUpdateSchema = productSchema.partial();
 
 const bulkProductSchema = z.array(
   z.object({
+    type: z.enum(["PRODUCTO", "VARIANTE"]).optional().default("PRODUCTO"),
     name: z.string().min(1),
     slug: z.string().optional(),
     price: z.coerce.number().min(0),

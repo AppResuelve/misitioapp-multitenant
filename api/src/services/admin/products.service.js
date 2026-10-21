@@ -802,7 +802,9 @@ const exportToExcel = async (tenantId) => {
     attrHeaders.push(`valor_${i}`);
   }
 
+  // Agregamos 'tipo' al inicio para identificar si es fila base o variante
   const headers = [
+    "tipo",
     "slug",
     "nombre",
     "categoria",
@@ -836,6 +838,34 @@ const exportToExcel = async (tenantId) => {
     const baseImages = Array.isArray(p.images) ? p.images.join(", ") : "";
 
     if (info.isVariant) {
+      // 1. FILA PADRE BASE (Tipo: PRODUCTO)
+      // Representa el precio base de la unidad (ej: el kg entero)
+      const parentRow = [
+        "PRODUCTO",
+        p.slug,
+        p.name,
+        p.category?.name || "",
+        Number(p.retailPrice) || 0,
+        Number(p.wholesalePrice) || "",
+        p.wholesaleMinQty !== null && p.wholesaleMinQty !== undefined
+          ? p.wholesaleMinQty
+          : "",
+        p.discountPercentage || "",
+        Number(p.comparePrice) || "",
+        p.description || "",
+        "", // El stock se maneja en los SKUs
+        "", // El padre no tiene un único SKU
+        tagsCell,
+        baseImages,
+        p.status || "active",
+      ];
+      // Relleno de columnas de atributos vacías para la fila padre
+      for (let i = 0; i < maxAttrs; i++) {
+        parentRow.push("", "");
+      }
+      rows.push(parentRow);
+
+      // 2. FILAS DE VARIANTES HIJAS (Tipo: VARIANTE)
       for (const s of info.skus) {
         const avs = s.attributeValues || [];
         const attrMap = {};
@@ -849,6 +879,7 @@ const exportToExcel = async (tenantId) => {
             : baseImages;
 
         const row = [
+          "VARIANTE",
           p.slug,
           p.name,
           p.category?.name || "",
@@ -878,8 +909,10 @@ const exportToExcel = async (tenantId) => {
         rows.push(row);
       }
     } else {
+      // PRODUCTO SIMPLE (Tipo: PRODUCTO)
       const sku = info.sku;
       const row = [
+        "PRODUCTO",
         p.slug,
         p.name,
         p.category?.name || "",

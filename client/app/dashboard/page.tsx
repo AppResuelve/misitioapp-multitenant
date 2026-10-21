@@ -3,12 +3,7 @@
 import { Store, Package, Tags, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui";
 import { useDashboard } from "@/hooks/admin-useDashboard";
-
-const STORE_STATUS_MAP = {
-  active: { label: "Activa", dot: "bg-emerald-500" },
-  draft: { label: "Borrador", dot: "bg-amber-500" },
-  maintenance: { label: "Mantenimiento", dot: "bg-red-500" },
-};
+import { STORE_STATUS_MAP } from "@/constants/store";
 
 export default function Dashboard() {
   const { data, loading } = useDashboard();

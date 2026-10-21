@@ -188,7 +188,7 @@ export function parseProducts(
   attrPairs,
   opts = {},
 ) {
-  const { slugCol = "" } = opts;
+  const { slugCol = "", typeCol = "tipo" } = opts;
   const products = [];
   const errors = [];
   const grouped = {};
@@ -214,12 +214,20 @@ export function parseProducts(
     const excelSlug = slugCol ? String(row[slugCol] ?? "").trim() : "";
     const key = normalizeKey(excelSlug || name);
 
+    // Identificar si la fila es PRODUCTO o VARIANTE
+    const rowType = String(row[typeCol] || row["tipo"] || "")
+      .trim()
+      .toUpperCase();
+    const isExplicitParent = rowType === "PRODUCTO";
+    const isExplicitVariant = rowType === "VARIANTE";
+
+    // 1. Inicializar el producto agrupado si no existe
     if (!grouped[key]) {
       grouped[key] = {
         name,
         slug: excelSlug || slugify(name),
         excelSlug: excelSlug || undefined,
-        price: Number(price), // <-- Indispensable para BulkProductModal y bulkCreate
+        price: Number(price),
         retailPrice: Number(price),
         skus: [],
       };
@@ -241,9 +249,13 @@ export function parseProducts(
           if (!isNaN(num)) grouped[key][fKey] = num;
         }
       }
+    } else if (isExplicitParent) {
+      // Si la fila del producto padre vino después, actualizamos el precio base oficial del producto
+      grouped[key].price = Number(price);
+      grouped[key].retailPrice = Number(price);
     }
 
-    // Asegurar tags aunque vengan en filas posteriores o sin mapeo explícito
+    // Asegurar tags aunque vengan en filas posteriores
     const tagsCol = optionals["tags"] || "tags";
     if (
       row[tagsCol] &&
@@ -252,7 +264,7 @@ export function parseProducts(
       grouped[key].tags = parseTagsList(row[tagsCol]);
     }
 
-    // Variantes / Atributos
+    // 2. Extraer variantes / atributos
     const attrValues = [];
     attrPairs.forEach(({ attrCol, valCol }) => {
       const attrName = String(row[attrCol] ?? "").trim();
@@ -260,7 +272,8 @@ export function parseProducts(
       if (attrName && value) attrValues.push({ attrName, value });
     });
 
-    if (attrValues.length > 0) {
+    // Si tiene atributos O viene explícitamente marcada como VARIANTE, la sumamos como SKU
+    if (attrValues.length > 0 || isExplicitVariant) {
       const skuImages =
         optionals["images"] && row[optionals["images"]]
           ? parseImageUrls(row[optionals["images"]])
@@ -300,7 +313,9 @@ export function parseUpdateProducts(
   optionals,
   attrPairs,
   field,
+  opts = {},
 ) {
+  const { typeCol = "tipo" } = opts;
   const products = [];
   const errors = [];
   const grouped = {};
@@ -323,6 +338,9 @@ export function parseUpdateProducts(
 
     const key = slug.toLowerCase();
     const name = nameCol ? String(row[nameCol] ?? "").trim() : "";
+    const rowType = String(row[typeCol] || row["tipo"] || "")
+      .trim()
+      .toUpperCase();
 
     if (!grouped[key]) {
       grouped[key] = {
@@ -343,9 +361,16 @@ export function parseUpdateProducts(
       if (attrName && value) attrValues.push({ attrName, value });
     });
 
-    if (attrValues.length > 0 && isSkuField) {
+    const isVariantRow = rowType === "VARIANTE" || attrValues.length > 0;
+    const isParentRow = rowType === "PRODUCTO";
+
+    if (isParentRow) {
+      // Fila explícita de producto padre: actualiza el valor general del producto
+      grouped[key].value = rawVal;
+    } else if (isVariantRow && isSkuField) {
+      // Fila de variante: se agrega a la lista de variantes para actualizar ese SKU puntual
       grouped[key].skus.push({ attrValues, value: rawVal });
-      // Asignar al padre como fallback si aún no tiene
+      // Si el padre todavía no tiene valor, lo seteamos como fallback
       if (!Object.prototype.hasOwnProperty.call(grouped[key], "value")) {
         grouped[key].value = rawVal;
       }
@@ -366,6 +391,7 @@ export function parseUpdateProducts(
 
 export function downloadTemplate() {
   const headers = [
+    "tipo",
     "slug",
     "nombre",
     "categoria",
@@ -386,7 +412,32 @@ export function downloadTemplate() {
     "valor_2",
   ];
 
-  const example1 = [
+  // 1. Producto Padre (Base para variantes o precio por unidad/kg)
+  const exampleParent = [
+    "PRODUCTO",
+    "remera-algodon",
+    "Remera Básica Algodón",
+    "Indumentaria",
+    15000,
+    12000,
+    6,
+    "",
+    18000,
+    "Remera 100% algodón peinado",
+    "", // Stock vacío en el padre (se gestiona por variante)
+    "", // SKU vacío en el padre
+    "Temporada: Verano, Material: Algodón",
+    "https://ejemplo.com/remera-1.jpg, https://ejemplo.com/remera-2.jpg",
+    "active",
+    "",
+    "",
+    "",
+    "",
+  ];
+
+  // 2. Variante A
+  const exampleVariant1 = [
+    "VARIANTE",
     "remera-algodon",
     "Remera Básica Algodón",
     "Indumentaria",
@@ -399,7 +450,7 @@ export function downloadTemplate() {
     10,
     "REM-NEG-S",
     "Temporada: Verano, Material: Algodón",
-    "https://ejemplo.com/remera-1.jpg, https://ejemplo.com/remera-2.jpg",
+    "https://ejemplo.com/remera-negra-s.jpg",
     "active",
     "Color",
     "Negro",
@@ -407,7 +458,9 @@ export function downloadTemplate() {
     "S",
   ];
 
-  const example2 = [
+  // 3. Variante B
+  const exampleVariant2 = [
+    "VARIANTE",
     "remera-algodon",
     "Remera Básica Algodón",
     "Indumentaria",
@@ -420,7 +473,7 @@ export function downloadTemplate() {
     5,
     "REM-NEG-M",
     "Temporada: Verano, Material: Algodón",
-    "https://ejemplo.com/remera-negra-1.jpg",
+    "https://ejemplo.com/remera-negra-m.jpg",
     "active",
     "Color",
     "Negro",
@@ -428,7 +481,9 @@ export function downloadTemplate() {
     "M",
   ];
 
-  const example3 = [
+  // 4. Producto Simple (Sin variantes)
+  const exampleSimpleProduct = [
+    "PRODUCTO",
     "serum-vitamina-c",
     "Serum Vitamina C 30ml",
     "Skincare",
@@ -450,7 +505,14 @@ export function downloadTemplate() {
   ];
 
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([headers, example1, example2, example3]);
+  const ws = XLSX.utils.aoa_to_sheet([
+    headers,
+    exampleParent,
+    exampleVariant1,
+    exampleVariant2,
+    exampleSimpleProduct,
+  ]);
+
   XLSX.utils.book_append_sheet(wb, ws, "Productos");
   XLSX.writeFile(wb, "plantilla-productos.xlsx");
 }

@@ -1,6 +1,6 @@
 const settingsService = require("../../services/store/settings.service");
 const discountsService = require("../../services/store/discounts.service");
-const { Branch, PaymentMethod } = require("../../models");
+const { Branch, PaymentMethod, Billing } = require("../../models");
 
 const DAY_NAMES = {
   mon: "Lun",
@@ -67,24 +67,26 @@ function formatBranchHours(hoursJson) {
 const getSettings = async (req, res, next) => {
   const tenantId = req.tenant.id;
   try {
-    const [settings, branches, discounts, paymentMethods] = await Promise.all([
-      settingsService.getSettings(tenantId),
-      Branch.findAll({
-        where: { tenantId: tenantId, isActive: true },
-        order: [
-          ["sortOrder", "ASC"],
-          ["name", "ASC"],
-        ],
-      }),
-      discountsService.getActiveDiscounts(tenantId),
-      PaymentMethod.findAll({
-        where: { tenantId: tenantId, isActive: true },
-        order: [
-          ["sortOrder", "ASC"],
-          ["title", "ASC"],
-        ],
-      }),
-    ]);
+    const [settings, branches, discounts, paymentMethods, billing] =
+      await Promise.all([
+        settingsService.getSettings(tenantId),
+        Branch.findAll({
+          where: { tenantId: tenantId, isActive: true },
+          order: [
+            ["sortOrder", "ASC"],
+            ["name", "ASC"],
+          ],
+        }),
+        discountsService.getActiveDiscounts(tenantId),
+        PaymentMethod.findAll({
+          where: { tenantId: tenantId, isActive: true },
+          order: [
+            ["sortOrder", "ASC"],
+            ["title", "ASC"],
+          ],
+        }),
+        Billing.findOne({ where: { tenantId }, attributes: ["status"] }),
+      ]);
 
     const formattedBranches = branches.map((b) => ({
       ...b.toJSON(),
@@ -121,6 +123,7 @@ const getSettings = async (req, res, next) => {
 
     res.json({
       ...settings,
+      billingStatus: billing?.status || "active",
       paymentMethods: formattedPaymentMethods,
       branches: formattedBranches,
       cartTotals,

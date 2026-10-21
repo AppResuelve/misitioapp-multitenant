@@ -1,17 +1,17 @@
-const { StoreSetting, Billing } = require("../models");
+const { Billing } = require("../models");
+const settingsService = require("../services/admin/settings.service");
 
 const storeStatus = async (req, res, next) => {
   try {
     const tenantId = req.tenant?.id;
     if (!tenantId) return next();
 
-    // EXCEPCIÓN: Permitir siempre leer settings para que el frontend público
-    // pueda mostrar logo, nombre y canales de contacto aun en pausa/mantenimiento
+    // 1. Excepción: permitir leer settings públicos siempre (para logo, redes y aviso)
     if (req.originalUrl && req.originalUrl.includes("/store/settings")) {
       return next();
     }
 
-    // 1. Chequeo de Facturación
+    // 2. Facturación de plataforma (Suspensión comercial)
     const billing = await Billing.findOne({
       where: { tenantId },
       attributes: ["status"],
@@ -24,17 +24,11 @@ const storeStatus = async (req, res, next) => {
       });
     }
 
-    // 2. Chequeo de Estado Operativo de la Tienda aprovechando el getSettings con el cache(Draft, Maintenance, etc.)
-    const settings = await settingsService.getSettings(tenantId);
+    // 3. Estado operativo del Tenant
+    const settings = await settingsService.getAll(tenantId);
     const status = settings?.storeStatus || "active";
 
-    if (status === "draft") {
-      return res.status(503).json({
-        error: "store_draft",
-        message: "Tienda en construcción. Volvé pronto.",
-      });
-    }
-
+    // Si está en mantenimiento: bloqueo total de navegación de catálogo y checkout
     if (status === "maintenance") {
       return res.status(503).json({
         error: "store_maintenance",
@@ -42,8 +36,22 @@ const storeStatus = async (req, res, next) => {
       });
     }
 
+    // Si está en pausa: solo bloqueamos la creación de pedidos (checkout)
+    // El catálogo sigue respondiendo para que los clientes puedan mirar productos
+    if (
+      status === "paused" &&
+      req.method === "POST" &&
+      req.originalUrl.includes("/store/orders")
+    ) {
+      return res.status(403).json({
+        error: "store_paused",
+        message: "La tienda no está aceptando nuevos pedidos en este momento.",
+      });
+    }
+
     next();
-  } catch {
+  } catch (err) {
+    console.error("[middleware storeStatus] ERROR:", err.message);
     next();
   }
 };
