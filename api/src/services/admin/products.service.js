@@ -1012,8 +1012,7 @@ const previewDiff = async (tenantId, field, products) => {
       const product = productMap[item.slug];
       if (!product) continue;
 
-      const isUnitType = productHasOnlyUnitAttributes(product);
-      const hasSkuData = item.skus?.length > 0 && !isUnitType;
+      const hasSkuData = item.skus?.length > 0;
 
       if (hasSkuData) {
         const skuDiffs = [];
@@ -1093,8 +1092,7 @@ const bulkUpdate = async (tenantId, field, products) => {
           continue;
         }
 
-        const isUnitType = productHasOnlyUnitAttributes(product);
-        const hasSkuData = item.skus?.length > 0 && !isUnitType;
+        const hasSkuData = item.skus?.length > 0;
 
         if (hasSkuData) {
           let conflict = false;

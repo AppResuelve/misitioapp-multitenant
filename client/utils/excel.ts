@@ -345,6 +345,10 @@ export function parseUpdateProducts(
 
     if (attrValues.length > 0 && isSkuField) {
       grouped[key].skus.push({ attrValues, value: rawVal });
+      // Asignar al padre como fallback si aún no tiene
+      if (!Object.prototype.hasOwnProperty.call(grouped[key], "value")) {
+        grouped[key].value = rawVal;
+      }
     } else if (!Object.prototype.hasOwnProperty.call(grouped[key], "value")) {
       grouped[key].value = rawVal;
     }
