@@ -20,12 +20,11 @@ export default function ProductPricingSection({
   skus,
   unitType,
 }: ProductPricingSectionProps) {
-  const minVariantPrice = hasSkus
-    ? Math.min(
-        ...skus.map((s) => Number(s.retailPrice)).filter((p) => p > 0),
-        0,
-      )
-    : 0;
+  const validPrices = hasSkus
+    ? skus.map((s) => Number(s.retailPrice)).filter((p) => p > 0)
+    : [];
+
+  const minVariantPrice = validPrices.length > 0 ? Math.min(...validPrices) : 0;
 
   return (
     <div className="space-y-4">
@@ -129,24 +128,13 @@ export default function ProductPricingSection({
       )}
 
       {/* Banners contextuales de variantes */}
-      {hasSkus && unitType ? (
-        <div className="p-3 rounded-xl flex items-start gap-2.5 bg-[var(--color-primary-light)]/40 border border-[var(--color-primary)]/20 transition-colors">
-          <Info className="w-4 h-4 text-[var(--color-primary-text)] shrink-0 mt-0.5" />
-          <div className="space-y-0.5">
-            <p className="text-xs font-semibold text-[var(--color-primary-text)]">
-              Precios por unidad ({UNIT_LABEL[unitType] || unitType})
-            </p>
-            <p className="text-[11px] text-[var(--color-text-secondary)] leading-snug">
-              Calculados proporcionalmente a partir del precio de venta base.
-            </p>
-          </div>
-        </div>
-      ) : hasSkus ? (
+      {hasSkus ? (
         <div className="p-3 rounded-xl flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/25 transition-colors">
           <AlertTriangle className="w-4 h-4 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
           <div className="space-y-0.5">
             <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-              Sincronizado con variantes
+              Variantes configuradas{" "}
+              {unitType ? `(${UNIT_LABEL[unitType] || unitType})` : ""}
             </p>
             <p className="text-[11px] text-[var(--color-text-secondary)] leading-snug">
               El catálogo muestra la variante más accesible ($

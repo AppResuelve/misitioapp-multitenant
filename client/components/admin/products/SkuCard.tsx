@@ -85,12 +85,6 @@ export default function SkuCard({
           ${sku.retailPrice || 0}
         </span>
 
-        {Boolean(unitType) && (
-          <span className="text-[10px] text-[var(--color-text-muted)] italic shrink-0">
-            (calculado)
-          </span>
-        )}
-
         <span
           className={`text-xs px-2.5 py-0.5 rounded-full font-medium shrink-0 border ${
             sku.status === "active"
@@ -126,14 +120,18 @@ export default function SkuCard({
             <Input
               label={
                 Boolean(unitType)
-                  ? `Precio venta x ${unitName}`
+                  ? `Precio venta (${unitName})`
                   : "Precio venta"
               }
               type="number"
-              value={sku.retailPrice}
-              readOnly={Boolean(unitType)}
-              disabled={Boolean(unitType)}
-              onChange={(e) => handleChange("retailPrice", e.target.value)}
+              min="0"
+              value={sku.retailPrice ?? ""}
+              onChange={(e) =>
+                handleChange(
+                  "retailPrice",
+                  e.target.value ? Number(e.target.value) : "",
+                )
+              }
             />
             <Input
               label="Stock"
@@ -161,49 +159,35 @@ export default function SkuCard({
             />
           </div>
 
-          {Boolean(unitType) ? (
-            <div>
-              <DropdownSelect
-                label="Estado"
-                value={sku.status}
-                onChange={(v) => handleChange("status", v)}
-                options={[
-                  { value: "active", label: "Activo" },
-                  { value: "draft", label: "Borrador" },
-                ]}
-              />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Input
-                label="Precio mayorista"
-                type="number"
-                min="0"
-                value={sku.wholesalePrice || ""}
-                onChange={(e) =>
-                  handleChange("wholesalePrice", e.target.value || null)
-                }
-              />
-              <Input
-                label="Cant. mín. mayorista"
-                type="number"
-                min="1"
-                value={sku.wholesaleMinQty || ""}
-                onChange={(e) =>
-                  handleChange("wholesaleMinQty", e.target.value || null)
-                }
-              />
-              <DropdownSelect
-                label="Estado"
-                value={sku.status}
-                onChange={(v) => handleChange("status", v)}
-                options={[
-                  { value: "active", label: "Activo" },
-                  { value: "draft", label: "Borrador" },
-                ]}
-              />
-            </div>
-          )}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Input
+              label="Precio mayorista"
+              type="number"
+              min="0"
+              value={sku.wholesalePrice || ""}
+              onChange={(e) =>
+                handleChange("wholesalePrice", e.target.value || null)
+              }
+            />
+            <Input
+              label="Cant. mín. mayorista"
+              type="number"
+              min="1"
+              value={sku.wholesaleMinQty || ""}
+              onChange={(e) =>
+                handleChange("wholesaleMinQty", e.target.value || null)
+              }
+            />
+            <DropdownSelect
+              label="Estado"
+              value={sku.status}
+              onChange={(v) => handleChange("status", v)}
+              options={[
+                { value: "active", label: "Activo" },
+                { value: "draft", label: "Borrador" },
+              ]}
+            />
+          </div>
         </div>
       )}
     </div>
