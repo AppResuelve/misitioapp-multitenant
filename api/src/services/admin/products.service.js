@@ -1047,9 +1047,12 @@ const previewDiff = async (tenantId, field, products) => {
 
     for (const item of chunkItems) {
       const product = productMap[item.slug];
+
       if (!product) continue;
 
-      const hasSkuData = item.skus?.length > 0;
+      const hasParentValue =
+        item.value !== undefined && item.value !== null && item.value !== "";
+      const hasSkuData = !hasParentValue && item.skus?.length > 0;
 
       if (hasSkuData) {
         const skuDiffs = [];
@@ -1077,6 +1080,7 @@ const previewDiff = async (tenantId, field, products) => {
             ? normalizeValue(field, product.skus[0][skuKey])
             : null;
         const newValue = normalizeValue(field, item.value);
+
         if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
           diffs.push({
             slug: item.slug,

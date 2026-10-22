@@ -65,6 +65,11 @@ export default function BulkUpdateModal({ open, onClose, onUpdated }) {
   const { products: parsed, errors } = useMemo(() => {
     if (!rawData || !slugCol || !selectedField)
       return { products: [], errors: [] };
+
+    // Detectar columna tipo
+    const typeCol =
+      rawData.headers?.find((h) => h.toLowerCase().trim() === "tipo") || "tipo";
+
     return parseUpdateProducts(
       rawData,
       slugCol,
@@ -73,6 +78,7 @@ export default function BulkUpdateModal({ open, onClose, onUpdated }) {
       optionals,
       attrPairs,
       selectedField,
+      { typeCol },
     );
   }, [
     rawData,
@@ -208,7 +214,8 @@ export default function BulkUpdateModal({ open, onClose, onUpdated }) {
           attrValues: s.attrValues,
           value: s.value,
         }));
-      } else {
+      }
+      if (p.value !== undefined) {
         data.value = p.value;
       }
       return data;

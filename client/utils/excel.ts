@@ -338,7 +338,7 @@ export function parseUpdateProducts(
 
     const key = slug.toLowerCase();
     const name = nameCol ? String(row[nameCol] ?? "").trim() : "";
-    const rowType = String(row[typeCol] || row["tipo"] || "")
+    const rawType = String(row[typeCol] || row["tipo"] || "")
       .trim()
       .toUpperCase();
 
@@ -347,6 +347,7 @@ export function parseUpdateProducts(
         name: name || slug,
         slug,
         excelSlug: slug,
+        parentValue: undefined,
         skus: [],
       };
     }
@@ -361,28 +362,38 @@ export function parseUpdateProducts(
       if (attrName && value) attrValues.push({ attrName, value });
     });
 
-    const isVariantRow = rowType === "VARIANTE" || attrValues.length > 0;
-    const isParentRow = rowType === "PRODUCTO";
+    const isVariantRow =
+      rawType === "VARIANTE" ||
+      (rawType !== "PRODUCTO" && attrValues.length > 0);
+    const isParentRow =
+      rawType === "PRODUCTO" || (!isVariantRow && attrValues.length === 0);
 
     if (isParentRow) {
-      // Fila explícita de producto padre: actualiza el valor general del producto
-      grouped[key].value = rawVal;
-    } else if (isVariantRow && isSkuField) {
-      // Fila de variante: se agrega a la lista de variantes para actualizar ese SKU puntual
-      grouped[key].skus.push({ attrValues, value: rawVal });
-      // Si el padre todavía no tiene valor, lo seteamos como fallback
-      if (!Object.prototype.hasOwnProperty.call(grouped[key], "value")) {
-        grouped[key].value = rawVal;
+      if (rawVal !== undefined && rawVal !== "") {
+        grouped[key].parentValue = rawVal;
       }
-    } else if (!Object.prototype.hasOwnProperty.call(grouped[key], "value")) {
-      grouped[key].value = rawVal;
+    } else if (isVariantRow && isSkuField) {
+      if (rawVal !== undefined && rawVal !== "") {
+        grouped[key].skus.push({ attrValues, value: rawVal });
+      }
     }
   });
 
   for (const p of Object.values(grouped)) {
-    if (p.skus.length === 0) {
+    // Si vino fila de producto base, ese valor manda
+    if (p.parentValue !== undefined) {
+      p.value = p.parentValue;
+    }
+
+    // Si tiene fila de producto padre, no mandamos los SKUs
+    // para evitar que el backend compare fracciones contra base
+    if (p.parentValue !== undefined && p.skus.length > 0) {
+      delete p.skus;
+    } else if (p.skus.length === 0) {
       delete p.skus;
     }
+
+    delete p.parentValue;
     products.push(p);
   }
 
