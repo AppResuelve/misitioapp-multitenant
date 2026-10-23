@@ -21,17 +21,22 @@ const sendAdminActivation = async ({ to, token, tenant }) => {
 };
 
 /**
- * Envía enlace de recuperación de contraseña de acceso al panel
+ * Envía código OTP de 6 dígitos y enlace directo de recuperación
  */
-const sendPasswordReset = async ({ to, token, tenant }) => {
-  const resetUrl = `${adminOriginFromTenant(tenant)}/reset/${token}`;
+const sendPasswordReset = async ({ to, code, token, tenant }) => {
+  const resetToken = code || token;
+  const resetUrl = tenant
+    ? `${adminOriginFromTenant(tenant)}/reset/${resetToken}`
+    : null;
 
   return await sendEmail({
     tenantId: tenant?.id || null,
     to,
     type: TYPES.RECOVERY,
     data: {
+      code,
       resetUrl,
+      recipientName: "Administrador",
       senderName: tenant?.name || "AppResuelve",
     },
     branding: "appresuelve",

@@ -1,73 +1,92 @@
-const authService = require('../services/auth.service')
+const authService = require("../services/auth.service");
 
 const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body
-    const result = await authService.login(email, password, req.tenant?.id)
-    res.json(result)
+    const { email, password } = req.body;
+    const result = await authService.login(email, password, req.tenant?.id);
+    res.json(result);
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
 
 const me = async (req, res, next) => {
   try {
-    const userId = req.user.id || null
-    const user = await authService.me(userId, req.tenant?.id)
-    res.json(user)
+    const userId = req.user.id || null;
+    const user = await authService.me(userId, req.tenant?.id);
+    res.json(user);
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
 
 const validateToken = async (req, res, next) => {
   try {
-    const { token } = req.body
-    const result = await authService.validateToken(token)
-    res.json(result)
+    const { token } = req.body;
+    const result = await authService.validateToken(token);
+    res.json(result);
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
 
 const activate = async (req, res, next) => {
   try {
-    const { token, password } = req.body
-    const result = await authService.activate(token, password)
-    res.json(result)
+    const { token, password } = req.body;
+    const result = await authService.activate(token, password);
+    res.json(result);
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
 
 const changePassword = async (req, res, next) => {
   try {
-    const { newPassword } = req.body
-    const result = await authService.changePassword(req.user.id, newPassword)
-    res.json(result)
+    const { newPassword } = req.body;
+    const result = await authService.changePassword(req.user.id, newPassword);
+    res.json(result);
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
 
 const forgotPassword = async (req, res, next) => {
   try {
-    const { email } = req.body
-    const result = await authService.forgotPassword(req.tenant.id, email, req.tenant)
-    res.json(result)
+    const { email } = req.body;
+    const result = await authService.forgotPassword(
+      req.tenant.id,
+      email,
+      req.tenant,
+    );
+    res.json(result);
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
 
 const resetPassword = async (req, res, next) => {
   try {
-    const { token, password } = req.body
-    const result = await authService.resetPassword(token, password)
-    res.json(result)
+    const { token, code, email, password } = req.body;
+    const tenantId = req.tenant?.id || null;
+    const result = await authService.resetPassword({
+      token,
+      code,
+      email,
+      password,
+      tenantId,
+    });
+    res.json(result);
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
 
-module.exports = { login, me, validateToken, activate, changePassword, forgotPassword, resetPassword }
+module.exports = {
+  login,
+  me,
+  validateToken,
+  activate,
+  changePassword,
+  forgotPassword,
+  resetPassword,
+};

@@ -195,48 +195,95 @@ const forgotPassword = async (tenantId, email, tenant) => {
   const user = await User.findOne({
     where: { tenantId, email, status: "active" },
   });
+
+  // Retorno temprano para mitigar enumeración de usuarios
   if (!user) {
     return { success: true };
   }
 
-  const token = crypto.randomBytes(32).toString("hex");
-  const hash = crypto.createHash("sha256").update(token).digest("hex");
-  const expires = new Date(Date.now() + 60 * 60 * 1000);
+  // 1. Generamos los 6 dígitos numéricos criptoseguros
+  const code = crypto.randomInt(100000, 1000000).toString();
 
-  await user.update({ resetTokenHash: hash, resetExpires: expires });
+  // 2. Hash SHA-256 para almacenamiento en DB
+  const codeHash = crypto.createHash("sha256").update(code).digest("hex");
 
-  const link = `${adminOriginFromTenant(tenant)}/reset/${token}`;
-  await emailService.sendResetPasswordEmail(email, link);
+  // 3. Ventana de expiración de 15 minutos para código OTP
+  const expires = new Date(Date.now() + 15 * 60 * 1000);
+
+  await user.update({
+    resetTokenHash: codeHash,
+    resetExpires: expires,
+  });
+
+  // 4. Se despacha a través de admin/email.service
+  await emailService.sendPasswordReset({
+    to: user.email,
+    code,
+    tenant,
+  });
 
   return { success: true };
 };
 
-const resetPassword = async (token, newPassword) => {
-  const hash = crypto.createHash("sha256").update(token).digest("hex");
-  const user = await User.findOne({
-    where: {
-      resetTokenHash: hash,
-      resetExpires: { [Op.gt]: new Date() },
-    },
-  });
-  if (!user) {
-    throw Object.assign(new Error("Token inválido o expirado"), {
-      status: 400,
-    });
-  }
-  if (!newPassword || newPassword.length < 6) {
+const resetPassword = async ({ token, code, email, password, tenantId }) => {
+  if (!password || password.length < 6) {
     throw Object.assign(
       new Error("La nueva contraseña debe tener al menos 6 caracteres"),
       { status: 400 },
     );
   }
 
-  user.password = newPassword;
+  let user = null;
+
+  if (code && email) {
+    // ── VÍA A: Validación por código OTP de 6 dígitos + Email ──
+    const codeHash = crypto
+      .createHash("sha256")
+      .update(code.trim())
+      .digest("hex");
+
+    const whereClause = {
+      email: email.trim().toLowerCase(),
+      resetTokenHash: codeHash,
+      resetExpires: { [Op.gt]: new Date() },
+      status: "active",
+    };
+
+    if (tenantId) {
+      whereClause.tenantId = tenantId;
+    }
+
+    user = await User.findOne({ where: whereClause });
+  } else if (token) {
+    // ── VÍA B: Validación por token (fallback URL /reset/[token]) ──
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(token.trim())
+      .digest("hex");
+
+    user = await User.findOne({
+      where: {
+        resetTokenHash: tokenHash,
+        resetExpires: { [Op.gt]: new Date() },
+        status: "active",
+      },
+    });
+  }
+
+  if (!user) {
+    throw Object.assign(new Error("Código o token inválido o expirado"), {
+      status: 400,
+    });
+  }
+
+  // Actualización de clave y limpieza de tokens
+  user.password = password;
   user.resetTokenHash = null;
   user.resetExpires = null;
   await user.save();
 
   const token_jwt = generateToken(user);
+
   return {
     success: true,
     token: token_jwt,
@@ -245,6 +292,7 @@ const resetPassword = async (token, newPassword) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      tenantId: user.tenantId,
     },
   };
 };
