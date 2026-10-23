@@ -84,6 +84,7 @@ const sendEmail = async ({
         recipient: targetEmail,
         type,
         status: "sent",
+        sentAt: new Date(),
         metadata: { messageId: result.messageId, data },
       }).catch((err) =>
         console.error("[EMAIL-LOG] Error guardando log:", err.message),

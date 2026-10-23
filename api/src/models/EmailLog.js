@@ -41,6 +41,9 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: "email_logs",
       underscored: true,
+      timestamps: true,
+      updatedAt: false, // Evita buscar la columna updated_at
+      createdAt: "created_at",
       indexes: [
         {
           unique: true,
