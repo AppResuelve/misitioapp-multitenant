@@ -43,7 +43,7 @@ export default function CustomAlert({
   message,
   duration = 0,
   onClose,
-  onConfirm,
+  onConfirm = null,
   showCancelButton = false,
   confirmButtonText = "Aceptar",
   cancelButtonText = "Cancelar",
