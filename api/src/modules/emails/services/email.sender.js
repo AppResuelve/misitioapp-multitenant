@@ -3,19 +3,12 @@ const brevo = require("../config/brevo");
 const { Tenant, StoreSetting, EmailLog } = require("../../../models");
 const { getSubject } = require("../utils/dinamicTexts");
 
-// Importamos los templates necesarios
-const accountSuspendedTemplate = require("../templates/account-suspended");
-const subscriptionExpiringSoonTemplate = require("../templates/subscription-expiring-soon");
-const recoveryTemplate = require("../templates/recovery");
-const welcomeTemplate = require("../templates/welcome");
-const contactFormTemplate = require("../templates/contact-form");
-
 const TEMPLATES = {
-  ACCOUNT_SUSPENDED: accountSuspendedTemplate,
-  SUBSCRIPTION_EXPIRING_SOON: subscriptionExpiringSoonTemplate,
-  RECOVERY: recoveryTemplate,
-  WELCOME: welcomeTemplate,
-  CONTACT_FORM: contactFormTemplate,
+  ACCOUNT_SUSPENDED: require("../templates/account-suspended"),
+  SUBSCRIPTION_EXPIRING_SOON: require("../templates/subscription-expiring-soon"),
+  RECOVERY: require("../templates/recovery"),
+  WELCOME: require("../templates/welcome"),
+  CONTACT_FORM: require("../templates/contact-form"),
 };
 
 const DEFAULTS = {
@@ -29,82 +22,99 @@ const sendEmail = async ({
   tenantId,
   to,
   type,
+  periodKey = null,
   data = {},
   branding = "appresuelve",
 }) => {
-  try {
-    let storeName = DEFAULTS.appName;
-    let supportEmail = DEFAULTS.supportEmail;
-    let logoNav = null;
-    let primaryColor = DEFAULTS.primaryColor;
-
-    if (tenantId && branding === "tenant") {
-      const tenant = await Tenant.findByPk(tenantId);
-      const settings = await StoreSetting.findOne({ where: { tenantId } });
-
-      storeName = settings?.businessName || tenant?.name || DEFAULTS.appName;
-      supportEmail = settings?.email || DEFAULTS.supportEmail;
-      logoNav = settings?.logoUrl || null;
-      primaryColor = DEFAULTS.primaryColor;
-    }
-
-    const templateFn = TEMPLATES[type];
-    if (!templateFn) {
-      throw new Error(`[EMAIL] Template type '${type}' no existe`);
-    }
-
-    const htmlContent = templateFn({
-      data,
-      logo: logoNav,
-      storeName,
-      palette: { primary: primaryColor },
+  // 1. Si viene periodKey, garantizamos idempotencia antes de disparar a Brevo
+  if (EmailLog && tenantId && periodKey) {
+    const alreadySent = await EmailLog.findOne({
+      where: { tenantId, type, periodKey, status: "sent" },
     });
+    if (alreadySent) {
+      console.log(
+        `[EMAIL] Omitido por idempotencia: ${type} - Tenant: ${tenantId} (${periodKey})`,
+      );
+      return { skipped: true };
+    }
+  }
 
-    const sender = {
+  let storeName = DEFAULTS.appName;
+  let supportEmail = DEFAULTS.supportEmail;
+  let logoNav = null;
+  let primaryColor = DEFAULTS.primaryColor;
+
+  if (tenantId && branding === "tenant") {
+    const tenant = await Tenant.findByPk(tenantId);
+    const settings = await StoreSetting.findOne({ where: { tenantId } });
+
+    storeName = settings?.businessName || tenant?.name || DEFAULTS.appName;
+    supportEmail = settings?.email || DEFAULTS.supportEmail;
+    logoNav = settings?.logoUrl || null;
+    primaryColor = DEFAULTS.primaryColor;
+  }
+
+  const templateFn = TEMPLATES[type];
+  if (!templateFn) {
+    throw new Error(`[EMAIL] Template type '${type}' no existe`);
+  }
+
+  const htmlContent = templateFn({
+    data,
+    logo: logoNav,
+    storeName,
+    palette: { primary: primaryColor },
+  });
+
+  const targetEmail = to || supportEmail;
+  const emailPayload = {
+    sender: {
       email: DEFAULTS.senderEmail,
       name: branding === "tenant" ? storeName : DEFAULTS.appName,
-    };
+    },
+    to: [{ email: targetEmail }],
+    subject: getSubject(type, { ...data, storeName }),
+    htmlContent,
+  };
 
-    const targetEmail = to || supportEmail;
+  let brevoResult = null;
+  let sendError = null;
 
-    const emailPayload = {
-      sender,
-      to: [{ email: targetEmail }],
-      subject: getSubject(type, { ...data, storeName }),
-      htmlContent,
-    };
-
-    // Enviar a través de la API v3 de Brevo con fetch nativo
-    const result = await brevo.sendTransacEmail(emailPayload);
-
-    // Auditoría en email_logs para prevenir duplicados en crons
-    if (EmailLog && tenantId) {
-      await EmailLog.create({
-        tenantId,
-        recipient: targetEmail,
-        type,
-        status: "sent",
-        sentAt: new Date(),
-        metadata: { messageId: result.messageId, data },
-      }).catch((err) =>
-        console.error("[EMAIL-LOG] Error guardando log:", err.message),
-      );
-    }
-
-    return result;
-  } catch (error) {
+  try {
+    brevoResult = await brevo.sendTransacEmail(emailPayload);
+  } catch (err) {
+    sendError = err;
     console.error(
-      `[EMAIL-SENDER] Error enviando email (${type}) a ${to}:`,
-      error.message,
+      `[EMAIL-SENDER] Error Brevo (${type}) a ${targetEmail}:`,
+      err.message,
     );
-    if (error.response?.body) {
-      console.error(
-        "[EMAIL-SENDER] Detalle Brevo:",
-        JSON.stringify(error.response.body, null, 2),
-      );
-    }
-    return null;
   }
+
+  // 2. Registro de auditoría (Upsert si tiene periodKey, Create si es transaccional simple)
+  if (EmailLog && tenantId) {
+    const logData = {
+      tenantId,
+      recipient: targetEmail,
+      type,
+      periodKey,
+      status: sendError || !brevoResult ? "failed" : "sent",
+      error: sendError ? sendError.message : null,
+      metadata: { messageId: brevoResult?.messageId, data },
+      sentAt: sendError || !brevoResult ? null : new Date(),
+    };
+
+    try {
+      if (periodKey) {
+        await EmailLog.upsert(logData);
+      } else {
+        await EmailLog.create(logData);
+      }
+    } catch (dbErr) {
+      console.error("[EMAIL-LOG] Error guardando log:", dbErr.message);
+    }
+  }
+
+  return brevoResult;
 };
 
 module.exports = { sendEmail };
