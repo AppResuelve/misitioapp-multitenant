@@ -3,119 +3,9 @@
 import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  LayoutDashboard,
-  FileBox,
-  Folder,
-  Settings,
-  Image,
-  Store,
-  X,
-  Wrench,
-  PieChart,
-  SlidersHorizontal,
-  Tag,
-  ChevronDown,
-  ChevronRight,
-  FolderOpen,
-  Percent,
-  Globe,
-  CreditCard,
-  Wallet,
-  Database,
-  HelpCircle,
-  Megaphone,
-  CalendarDays,
-  LayoutTemplate,
-  Images,
-  Layers,
-} from "lucide-react";
+import { PieChart, X, ChevronDown, Settings } from "lucide-react";
 import { useUnsavedChanges } from "@/context/UnsavedChangesContext";
-
-const NAV_CONFIG = [
-  {
-    group: "General",
-    items: [
-      { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-      {
-        label: "Catálogo",
-        icon: FolderOpen,
-        children: [
-          { to: "/dashboard/products", icon: FileBox, label: "Productos" },
-          { to: "/dashboard/categories", icon: Folder, label: "Categorías" },
-          { to: "/dashboard/tags", icon: Tag, label: "Etiquetas" },
-          {
-            to: "/dashboard/attributes",
-            icon: SlidersHorizontal,
-            label: "Atributos",
-          },
-        ],
-      },
-      {
-        label: "Marketing",
-        icon: Megaphone,
-        children: [
-          {
-            to: "/dashboard/marketing/campaigns",
-            icon: CalendarDays,
-            label: "Campañas",
-          },
-          {
-            to: "/dashboard/marketing/discounts",
-            icon: Percent,
-            label: "Descuentos",
-          },
-        ],
-      },
-      { to: "/dashboard/media", icon: Image, label: "Galería" },
-    ],
-  },
-  {
-    group: "Sitio público",
-    items: [
-      { to: "/dashboard/store", icon: Store, label: "Tienda" },
-      {
-        label: "Contenido",
-        icon: Layers,
-        children: [
-          {
-            to: "/dashboard/content/banners",
-            icon: LayoutTemplate,
-            label: "Banners",
-          },
-          {
-            to: "/dashboard/content/carousels",
-            icon: Images,
-            label: "Carruseles",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    group: "Desarrollador",
-    items: [
-      {
-        to: "/dashboard/change-requests",
-        icon: Wrench,
-        label: "Solicitar cambio",
-      },
-    ],
-  },
-];
-
-const SETTINGS_ITEMS = [
-  { to: "/dashboard/settings/general", label: "General", icon: Globe },
-  { to: "/dashboard/settings/contact", label: "Contacto", icon: Settings },
-  {
-    to: "/dashboard/settings/payment",
-    label: "Medios de pago",
-    icon: Wallet,
-  },
-  { to: "/dashboard/settings/billing", label: "Facturación", icon: CreditCard },
-  { to: "/dashboard/settings/data", label: "Datos", icon: Database },
-  { to: "/dashboard/settings/help", label: "Ayuda", icon: HelpCircle },
-];
+import { NAV_CONFIG, SETTINGS_ITEMS } from "@/data/admin/navigation";
 
 export default function Sidebar({ open, onClose, logoUrl, hasBanner = false }) {
   const pathname = usePathname();
@@ -125,6 +15,40 @@ export default function Sidebar({ open, onClose, logoUrl, hasBanner = false }) {
   const [openSubmenus, setOpenSubmenus] = useState<string[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // 1. Efecto: la ruta activa auto-cierra los demás grupos
+  useEffect(() => {
+    const isSettingsActive = SETTINGS_ITEMS.some((item) =>
+      pathname.startsWith(item.to),
+    );
+
+    if (isSettingsActive) {
+      setSettingsOpen(true);
+      setOpenSubmenus([]);
+      return;
+    }
+
+    let activeMenuLabel: string | null = null;
+    for (const group of NAV_CONFIG) {
+      for (const item of group.items) {
+        if (item.children?.some((child) => pathname.startsWith(child.to))) {
+          activeMenuLabel = item.label;
+          break;
+        }
+      }
+      if (activeMenuLabel) break;
+    }
+
+    if (activeMenuLabel) {
+      setOpenSubmenus([activeMenuLabel]);
+      setSettingsOpen(false);
+    } else {
+      // Rutas directas (ej: /dashboard o /dashboard/media)
+      setOpenSubmenus([]);
+      setSettingsOpen(false);
+    }
+  }, [pathname]);
+
+  // 2. Toggle manual de submenús (permite varios abiertos mientras no se cambie de ruta)
   const toggleSubmenu = (label: string) => {
     if (settingsOpen) setSettingsOpen(false);
     setOpenSubmenus((prev) =>
@@ -132,22 +56,13 @@ export default function Sidebar({ open, onClose, logoUrl, hasBanner = false }) {
     );
   };
 
+  // 3. Toggle manual de Configuración: siempre repliega los demás
   const handleSettingsToggle = () => {
-    if (openSubmenus.length > 0) setOpenSubmenus([]);
+    if (!settingsOpen) {
+      setOpenSubmenus([]);
+    }
     setSettingsOpen((prev) => !prev);
   };
-
-  useEffect(() => {
-    NAV_CONFIG.forEach((group) => {
-      group.items.forEach((item) => {
-        if (item.children?.some((child) => pathname.startsWith(child.to))) {
-          setOpenSubmenus((prev) =>
-            prev.includes(item.label) ? prev : [...prev, item.label],
-          );
-        }
-      });
-    });
-  }, [pathname]);
 
   const navItemClass = (active: boolean) =>
     `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
@@ -184,7 +99,7 @@ export default function Sidebar({ open, onClose, logoUrl, hasBanner = false }) {
         </button>
       </div>
 
-      {/* Nav */}
+      {/* Navegación Principal */}
       <nav className="flex-1 px-3 py-3 space-y-3 overflow-y-auto">
         {NAV_CONFIG.map((group, gi) => (
           <div key={group.group}>
@@ -200,53 +115,62 @@ export default function Sidebar({ open, onClose, logoUrl, hasBanner = false }) {
                 const isActive = item.children.some((c) =>
                   pathname.startsWith(c.to),
                 );
+
                 return (
                   <div key={item.label}>
                     <button
                       onClick={() => toggleSubmenu(item.label)}
                       className={`w-full ${navItemClass(isActive)}`}
                     >
-                      <item.icon className="w-4 h-4" />
+                      <item.icon className="w-4 h-4 shrink-0" />
                       <span className="flex-1 text-left">{item.label}</span>
-                      {isOpen ? (
-                        <ChevronDown className="w-4 h-4" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4" />
-                      )}
+                      <ChevronDown
+                        className={`w-4 h-4 shrink-0 transition-transform duration-200 ease-in-out ${
+                          isOpen ? "rotate-0" : "-rotate-90"
+                        }`}
+                      />
                     </button>
-                    {isOpen && (
-                      <div className="ml-4 mt-1 pl-2 border-l border-[var(--color-border)] space-y-1">
-                        {item.children.map((child) => (
-                          <Link
-                            key={child.to}
-                            href={child.to}
-                            onClick={async (e) => {
-                              e.preventDefault();
-                              if (await confirmLeave()) {
-                                onClose();
-                                router.push(child.to);
-                              }
-                            }}
-                            className={navItemClass(
-                              pathname.startsWith(child.to),
-                            )}
-                          >
-                            <child.icon className="w-4 h-4" />
-                            {child.label}
-                          </Link>
-                        ))}
+
+                    {/* Contenedor animado con grid de 200ms */}
+                    <div
+                      className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
+                        isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                      }`}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="ml-4 mt-1 pl-2 border-l border-[var(--color-border)] space-y-1">
+                          {item.children.map((child) => (
+                            <Link
+                              key={child.to}
+                              href={child.to}
+                              onClick={async (e) => {
+                                e.preventDefault();
+                                if (await confirmLeave()) {
+                                  onClose();
+                                  router.push(child.to);
+                                }
+                              }}
+                              className={navItemClass(
+                                pathname.startsWith(child.to),
+                              )}
+                            >
+                              <child.icon className="w-4 h-4 shrink-0" />
+                              {child.label}
+                            </Link>
+                          ))}
+                        </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                 );
               }
+
               return (
                 <Link
                   key={item.to}
                   href={item.to}
                   onClick={async (e) => {
                     e.preventDefault();
-                    if (settingsOpen) setSettingsOpen(false);
                     if (await confirmLeave()) {
                       onClose();
                       router.push(item.to);
@@ -254,7 +178,7 @@ export default function Sidebar({ open, onClose, logoUrl, hasBanner = false }) {
                   }}
                   className={navItemClass(pathname === item.to)}
                 >
-                  <item.icon className="w-4 h-4" />
+                  <item.icon className="w-4 h-4 shrink-0" />
                   {item.label}
                 </Link>
               );
@@ -263,42 +187,52 @@ export default function Sidebar({ open, onClose, logoUrl, hasBanner = false }) {
         ))}
       </nav>
 
-      {/* Footer del Sidebar */}
+      {/* Footer del Sidebar: Configuración */}
       <div className="border-t border-[var(--color-border)] p-3 space-y-1">
         <button
           onClick={handleSettingsToggle}
-          className={`w-full ${navItemClass(settingsOpen)}`}
+          className={`w-full ${navItemClass(
+            settingsOpen ||
+              SETTINGS_ITEMS.some((i) => pathname.startsWith(i.to)),
+          )}`}
         >
-          <Settings className="w-4 h-4" />
+          <Settings className="w-4 h-4 shrink-0" />
           <span className="flex-1 text-left">Configuración</span>
-          {settingsOpen ? (
-            <ChevronDown className="w-4 h-4" />
-          ) : (
-            <ChevronRight className="w-4 h-4" />
-          )}
+          <ChevronDown
+            className={`w-4 h-4 shrink-0 transition-transform duration-200 ease-in-out ${
+              settingsOpen ? "rotate-0" : "-rotate-90"
+            }`}
+          />
         </button>
 
-        {settingsOpen && (
-          <div className="mt-1 ml-4 pl-2 border-l border-[var(--color-border)] space-y-1">
-            {SETTINGS_ITEMS.map((item) => (
-              <Link
-                key={item.to}
-                href={item.to}
-                onClick={async (e) => {
-                  e.preventDefault();
-                  if (await confirmLeave()) {
-                    onClose();
-                    router.push(item.to);
-                  }
-                }}
-                className={navItemClass(pathname.startsWith(item.to))}
-              >
-                <item.icon className="w-4 h-4" />
-                {item.label}
-              </Link>
-            ))}
+        {/* Contenedor animado con grid de 200ms para Configuración */}
+        <div
+          className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
+            settingsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+          }`}
+        >
+          <div className="overflow-hidden">
+            <div className="mt-1 ml-4 pl-2 border-l border-[var(--color-border)] space-y-1">
+              {SETTINGS_ITEMS.map((item) => (
+                <Link
+                  key={item.to}
+                  href={item.to}
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    if (await confirmLeave()) {
+                      onClose();
+                      router.push(item.to);
+                    }
+                  }}
+                  className={navItemClass(pathname.startsWith(item.to))}
+                >
+                  <item.icon className="w-4 h-4 shrink-0" />
+                  {item.label}
+                </Link>
+              ))}
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </>
   );

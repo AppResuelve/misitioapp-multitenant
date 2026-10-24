@@ -10,6 +10,7 @@ import { Spinner, Skeleton } from "@/components/ui";
 import BillingAlertBanner from "@/components/admin/BillingAlertBanner";
 import AdminBlocked from "@/components/admin/AdminBlocked";
 import { LogOut } from "lucide-react";
+import { scrollToTop } from "@/utils/scrollToTop";
 
 const Sidebar = dynamic(() => import("@/components/admin/Sidebar"), {
   ssr: false,
@@ -33,6 +34,7 @@ export default function AdminShell({
 
   useEffect(() => {
     setSidebarOpen(false);
+    scrollToTop("main-container");
   }, [pathname]);
 
   useEffect(() => {
@@ -102,6 +104,7 @@ export default function AdminShell({
         hasBanner={hasBanner}
       />
       <main
+        id="main-container"
         className={`ml-0 lg:ml-64 p-4 lg:p-6 transition-[padding-top] duration-200 min-h-screen ${
           hasBanner ? "mt-32" : "mt-16"
         }`}
