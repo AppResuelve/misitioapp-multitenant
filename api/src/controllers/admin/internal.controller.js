@@ -274,6 +274,7 @@ const updateTenant = async (req, res, next) => {
   try {
     const { slug } = req.params;
     const { name, domain, adminDomain, folderPrefix } = req.body;
+    console.log("ESTE ES EL BODY", req.body);
 
     const tenant = await Tenant.findOne({ where: { slug } });
     if (!tenant) {
