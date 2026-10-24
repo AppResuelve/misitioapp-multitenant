@@ -2,12 +2,18 @@ const { Tag, TagValue, sequelize } = require("../../models");
 const { Op } = require("sequelize");
 
 const list = async (tenantId, categoryId, activeTagIds = []) => {
+  if (!tenantId) return [];
+
+  // 1. FIX CRÍTICO: Filtrar las etiquetas por el tenantId
   const tags = await Tag.findAll({
+    where: { tenantId },
     include: [
       {
         model: TagValue,
         as: "values",
         attributes: ["id", "value", "sortOrder", "tagId"],
+        // Si tu tabla tag_values también tiene tenant_id, lo resguardamos:
+        ...(TagValue.rawAttributes.tenantId ? { where: { tenantId } } : {}),
       },
     ],
     order: [
@@ -28,7 +34,7 @@ const list = async (tenantId, categoryId, activeTagIds = []) => {
     }
   }
 
-  // FIX: Sanitizamos el categoryId para evitar el temido 'undefined' literal
+  // Sanitizamos el categoryId
   const validCategoryId =
     categoryId && categoryId !== "undefined" && categoryId !== "null"
       ? Number(categoryId)
@@ -49,14 +55,12 @@ const list = async (tenantId, categoryId, activeTagIds = []) => {
           `SELECT "product_id" FROM "product_tags" WHERE "tag_value_id" IN (${ids.join(",")})`,
       );
 
-      // Usamos la variable ya limpia y sanitizada
       const categoryFilter = validCategoryId
         ? `AND "Product"."category_id" = ${validCategoryId}`
         : "";
 
-      const tenantFilter = tenantId
-        ? `AND "Product"."tenant_id" = ${tenantId}`
-        : "";
+      // Garantizamos que solo busque productos de este tenant
+      const tenantFilter = `AND "Product"."tenant_id" = ${Number(tenantId)}`;
 
       const checkQuery = `
         SELECT COUNT(*) as count
