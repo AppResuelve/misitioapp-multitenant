@@ -1,6 +1,6 @@
-// @ts-nocheck
 "use client";
-import {
+
+import React, {
   createContext,
   useContext,
   useState,
@@ -10,24 +10,49 @@ import {
 import { createPortal } from "react-dom";
 import CustomAlert from "../components/ui/CustomAlert";
 
-const AlertContext = createContext();
+export interface AlertConfig {
+  title?: string;
+  message?: string;
+  text?: string;
+  type?: "success" | "error" | "warning" | "info";
+  messageType?: "success" | "error" | "warning" | "info";
+  variant?: "banner" | "modal" | "toast" | string;
+  style?: string;
+  alertType?: string;
+  duration?: number | null;
+  showCancelButton?: boolean;
+  confirmButtonText?: string;
+  actionLabel?: string;
+  cancelButtonText?: string;
+}
 
-export const AlertProvider = ({ children }) => {
-  const [alerts, setAlerts] = useState([]);
+export interface AlertResult {
+  isConfirmed: boolean;
+  value?: any;
+}
+
+export interface AlertContextType {
+  fire: (config: AlertConfig) => Promise<AlertResult>;
+}
+
+const AlertContext = createContext<AlertContextType | null>(null);
+
+export const AlertProvider = ({ children }: { children: React.ReactNode }) => {
+  const [alerts, setAlerts] = useState<any[]>([]);
   const [toastRoot, setToastRoot] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     setToastRoot(document.getElementById("toast-root") || document.body);
   }, []);
 
-  const removeAlert = useCallback((id) => {
+  const removeAlert = useCallback((id: string) => {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
   const fire = useCallback(
-    (config) => {
+    (config: AlertConfig): Promise<AlertResult> => {
       return new Promise((resolve) => {
-        const id = Math.random().toString(36).substr(2, 9);
+        const id = Math.random().toString(36).substring(2, 9);
         const variant =
           config.variant || config.style || config.alertType || "banner";
 
@@ -48,7 +73,7 @@ export const AlertProvider = ({ children }) => {
             config.confirmButtonText || config.actionLabel || "Aceptar",
           cancelButtonText: config.cancelButtonText || "Cancelar",
 
-          onConfirm: (value) => {
+          onConfirm: (value?: any) => {
             removeAlert(id);
             if (value !== undefined) resolve({ value, isConfirmed: true });
             else resolve({ isConfirmed: true });
@@ -82,7 +107,7 @@ export const AlertProvider = ({ children }) => {
           <>
             <div
               className="fixed top-4 left-4 right-4 md:top-6 md:right-6 md:left-auto z-[9999]
-                          flex flex-col items-center md:items-end pointer-events-none gap-2"
+                         flex flex-col items-center md:items-end pointer-events-none gap-2"
             >
               {alerts
                 .filter((a) => a.variant === "banner")
@@ -94,7 +119,7 @@ export const AlertProvider = ({ children }) => {
                       key={alert.id}
                       className="pointer-events-auto transition-all duration-500 ease-out w-full md:w-auto"
                       style={{
-                        transform: `translateY(${position * 0}px) scale(${1 - position * 0.05})`,
+                        transform: `translateY(${position * 8}px) scale(${1 - position * 0.05})`,
                         opacity: 1 - position * 0.2,
                         zIndex: total - position,
                       }}
@@ -117,4 +142,10 @@ export const AlertProvider = ({ children }) => {
   );
 };
 
-export const useAlert = () => useContext(AlertContext);
+export const useAlert = (): AlertContextType => {
+  const context = useContext(AlertContext);
+  if (!context) {
+    throw new Error("useAlert debe usarse dentro de AlertProvider");
+  }
+  return context;
+};
