@@ -1,10 +1,10 @@
 const { Product, Category, sequelize } = require("../../models");
 const { QueryTypes } = require("sequelize");
-const settingsService = require("../store/settings.service"); // Usamos el servicio con caché
+const settingsService = require("../admin/settings.service"); // Usamos el servicio con caché
 
 const get = async (tenantId) => {
   // 1. Obtenemos datos de la tienda directo desde la memoria (0 ms)
-  const settingsPromise = settingsService.getSettings(tenantId);
+  const settingsPromise = settingsService.getAll(tenantId);
 
   // 2. Ejecutamos las métricas de DB en paralelo
   const tenantClause = tenantId ? `AND orders.tenant_id = :tenantId` : "";

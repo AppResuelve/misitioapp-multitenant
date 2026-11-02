@@ -11,6 +11,7 @@ interface FastSearchModalProps {
   onClose: () => void;
   onSelect: (item: any) => void;
   scope?: "all" | "products" | "categories"; // Scope inicial o forzado
+  status?: "all" | "active"; // Scope inicial o forzado
   lockScope?: boolean; // Si es true, el badge de scope es fijo y no se puede quitar
   placeholder?: string;
 }
@@ -20,6 +21,7 @@ export default function FastSearchModal({
   onClose,
   onSelect,
   scope = "all",
+  status = "all",
   lockScope = false,
   placeholder,
 }: FastSearchModalProps) {
@@ -75,7 +77,7 @@ export default function FastSearchModal({
     timerRef.current = setTimeout(async () => {
       try {
         const { data } = await api.get("/admin/search", {
-          params: { q: term, scope: currentScope, limit: 12 },
+          params: { q: term, scope: currentScope, limit: 12, status: status },
         });
         setResults(data.results || []);
         setSelectedIndex(0);

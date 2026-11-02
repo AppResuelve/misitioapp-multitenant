@@ -1,11 +1,8 @@
 const crypto = require("crypto");
-const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { Op } = require("sequelize");
-const { User, Billing } = require("../models");
+const { User, Billing, Tenant } = require("../models");
 const emailService = require("./admin/email.service");
-const settingsService = require("./store/settings.service");
-const { adminOriginFromTenant } = require("../utils/adminOrigin");
 
 // Helper para obtener el estado de facturación desde la tabla billings
 const getBillingInfo = async (tenantId) => {
@@ -38,13 +35,6 @@ const getBillingInfo = async (tenantId) => {
   }
 };
 
-// Resuelve el nombre del negocio desde el caché en memoria
-const getBusinessName = async (tenantId) => {
-  if (!tenantId) return "";
-  const settings = await settingsService.getSettings(tenantId);
-  return settings?.businessName || "";
-};
-
 const generateToken = (user) => {
   return jwt.sign(
     {
@@ -59,11 +49,8 @@ const generateToken = (user) => {
   );
 };
 
-const login = async (email, password, tenantId) => {
-  const [billing, businessName] = await Promise.all([
-    getBillingInfo(tenantId),
-    getBusinessName(tenantId),
-  ]);
+const login = async (tenantId, email, password, businessName) => {
+  const billing = await getBillingInfo(tenantId);
 
   // Super Admin Bypass
   if (
@@ -225,7 +212,7 @@ const forgotPassword = async (tenantId, email, tenant) => {
   return { success: true };
 };
 
-const resetPassword = async ({ token, code, email, password, tenantId }) => {
+const resetPassword = async ({ tenantId, token, code, email, password }) => {
   if (!password || password.length < 6) {
     throw Object.assign(
       new Error("La nueva contraseña debe tener al menos 6 caracteres"),
@@ -297,11 +284,8 @@ const resetPassword = async ({ token, code, email, password, tenantId }) => {
   };
 };
 
-const me = async (userId, tenantId) => {
-  const [billing, businessName] = await Promise.all([
-    getBillingInfo(tenantId),
-    getBusinessName(tenantId),
-  ]);
+const me = async (tenantId, userId, businessName) => {
+  const billing = await getBillingInfo(tenantId);
 
   if (!userId) {
     return {

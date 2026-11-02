@@ -1,40 +1,27 @@
 // @ts-nocheck
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Info, Lock } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
 import { useUnsavedChanges } from "@/context/UnsavedChangesContext";
 import { useCampaigns } from "@/hooks/admin-useCampaigns";
-import { useCategories } from "@/hooks/admin-useCategories";
 import { useSiteContent } from "@/hooks/admin-useSiteContent";
+import { useSlotAvailability } from "@/hooks/admin-useSlotAvailability";
 import { siteContentService } from "@/services/siteContent.service";
 import { Button, DropdownSelect, Input, Spinner } from "@/components/ui";
 import ImageUpload from "@/components/admin/ImageUpload";
+import CampaignScheduleFields from "@/components/admin/content/CampaignScheduleFields";
+import LinkDestinationSelector from "@/components/admin/content/LinkDestinationSelector";
+
 import {
   BANNER_SLOTS,
-  LINK_TYPES,
   SITE_CONTENT_MESSAGES,
+  EMPTY_BANNER,
 } from "@/constants/siteContent";
-import ResourceSearchTrigger from "@/components/admin/search/ResourceSearchTrigger";
-
-const EMPTY_BANNER = {
-  name: "",
-  slotKey: BANNER_SLOTS[0]?.key || "top_bar",
-  status: "draft",
-  campaignId: "",
-  linkType: "none",
-  categoryId: "",
-  productId: "",
-  externalUrl: "",
-  config: {
-    imageUrl: null,
-    title: "",
-    subtitle: "",
-    buttonText: "",
-  },
-};
+import { SLOT_ALLOWED_LINKS } from "@/types/siteContent";
+import { toLocalDatetimeInput } from "@/utils/date";
 
 export default function BannerFormPage() {
   const { id } = useParams();
@@ -43,24 +30,83 @@ export default function BannerFormPage() {
   const Alert = useAlert();
   const { confirmLeave } = useUnsavedChanges();
 
-  const isEditing = Boolean(id) && id !== "new";
+  // Filtrar banners archivados para no limitar la disponibilidad de la ranura
+  const { items: allBanners } = useSiteContent({ kind: "banner" });
+  const activeAndDraftBanners = useMemo(
+    () => allBanners.filter((b) => b.status !== "archived"),
+    [allBanners],
+  );
 
-  const { createItem, updateItem } = useSiteContent({ kind: "banner" });
   const { campaigns } = useCampaigns();
-  const { categories } = useCategories();
 
   const [form, setForm] = useState(EMPTY_BANNER);
+  const isEditing = Boolean(id) && id !== "new";
   const [loading, setLoading] = useState(isEditing);
   const [saving, setSaving] = useState(false);
+  const isArchived = form.status === "archived";
 
-  // Si viene con slotKey precargado en URL (ej: /banners/new?slotKey=category_highlight)
   const querySlot = searchParams?.get("slotKey");
+
+  const handleSlotChange = (newSlotKey: string) => {
+    const allowed = SLOT_ALLOWED_LINKS[newSlotKey] || [
+      "none",
+      "category",
+      "product",
+      "external",
+    ];
+    const isCurrentLinkValid = allowed.includes(form.linkType);
+
+    setForm((prev) => {
+      const nextLinkType = isCurrentLinkValid
+        ? prev.linkType
+        : allowed.includes("category")
+          ? "category"
+          : allowed.includes("product")
+            ? "product"
+            : allowed[0] || "none";
+
+      return {
+        ...prev,
+        slotKey: newSlotKey,
+        linkType: nextLinkType,
+        ...(!isCurrentLinkValid && {
+          categoryId: "",
+          categoryName: "",
+          productId: "",
+          productName: "",
+          externalUrl: "",
+        }),
+      };
+    });
+  };
+
+  const { slotOptions } = useSlotAvailability({
+    slots: BANNER_SLOTS,
+    existingItems: activeAndDraftBanners, // Solo los no archivados cuentan
+    currentSlotKey: form.slotKey,
+    currentId: id,
+    isEditing,
+    onSelectSlot: handleSlotChange,
+  });
+
+  const currentSlotDef = useMemo(() => {
+    return BANNER_SLOTS.find((s) => s.key === form.slotKey);
+  }, [form.slotKey]);
+
+  const allowedLinks = useMemo(() => {
+    return (
+      SLOT_ALLOWED_LINKS[form.slotKey] || [
+        "none",
+        "category",
+        "product",
+        "external",
+      ]
+    );
+  }, [form.slotKey]);
 
   useEffect(() => {
     if (!isEditing) {
-      if (querySlot) {
-        setForm((prev) => ({ ...prev, slotKey: querySlot }));
-      }
+      if (querySlot) handleSlotChange(querySlot);
       setLoading(false);
       return;
     }
@@ -74,9 +120,13 @@ export default function BannerFormPage() {
           slotKey: data.slotKey || BANNER_SLOTS[0]?.key,
           status: data.status || "draft",
           campaignId: data.campaignId ? String(data.campaignId) : "",
+          startAt: data.startsAt ? toLocalDatetimeInput(data.startsAt) : "",
+          endAt: data.endsAt ? toLocalDatetimeInput(data.endsAt) : "",
           linkType: data.linkType || "none",
           categoryId: data.categoryId ? String(data.categoryId) : "",
+          categoryName: data.category?.name || "",
           productId: data.productId ? String(data.productId) : "",
+          productName: data.product?.name || "",
           externalUrl: data.externalUrl || "",
           config: {
             imageUrl: data.config?.imageUrl || null,
@@ -86,13 +136,12 @@ export default function BannerFormPage() {
           },
         });
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error("Error al cargar banner:", err);
         Alert.fire({ message: "No se encontró el banner", type: "error" });
         router.push("/dashboard/content/banners");
       })
-      .finally(() => {
-        setLoading(false);
-      });
+      .finally(() => setLoading(false));
   }, [id, isEditing, querySlot, router, Alert]);
 
   const handleBack = async (e: React.MouseEvent) => {
@@ -109,15 +158,14 @@ export default function BannerFormPage() {
   const handleConfigChange = (key: string, value: any) => {
     setForm((prev) => ({
       ...prev,
-      config: {
-        ...prev.config,
-        [key]: value,
-      },
+      config: { ...prev.config, [key]: value },
     }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isArchived) return;
 
     if (!form.name.trim()) {
       Alert.fire({
@@ -135,10 +183,16 @@ export default function BannerFormPage() {
         slotKey: form.slotKey,
         status: form.status,
         campaignId: form.campaignId ? Number(form.campaignId) : null,
+        startsAt: form.startAt ? new Date(form.startAt).toISOString() : null,
+        endsAt: form.endAt ? new Date(form.endAt).toISOString() : null,
         linkType: form.linkType,
         categoryId:
           form.linkType === "category" && form.categoryId
             ? Number(form.categoryId)
+            : null,
+        productId:
+          form.linkType === "product" && form.productId
+            ? Number(form.productId)
             : null,
         externalUrl:
           form.linkType === "external" ? form.externalUrl.trim() : null,
@@ -151,14 +205,14 @@ export default function BannerFormPage() {
       };
 
       if (isEditing) {
-        await updateItem(id, payload);
+        await siteContentService.update(id, payload);
         Alert.fire({
           message: SITE_CONTENT_MESSAGES.UPDATE_SUCCESS,
           type: "success",
           duration: 1500,
         });
       } else {
-        await createItem(payload);
+        await siteContentService.create(payload);
         Alert.fire({
           message: SITE_CONTENT_MESSAGES.CREATE_SUCCESS,
           type: "success",
@@ -168,6 +222,7 @@ export default function BannerFormPage() {
 
       router.push("/dashboard/content/banners");
     } catch (err: any) {
+      console.error("Error al guardar banner:", err);
       const msg =
         err.response?.data?.error ||
         err.response?.data?.message ||
@@ -188,7 +243,7 @@ export default function BannerFormPage() {
 
   return (
     <form onSubmit={handleSubmit} className="max-w-4xl mx-auto space-y-6 pb-38">
-      {/* Barra de cabecera con volver */}
+      {/* Top Bar */}
       <div className="flex items-center justify-between gap-4">
         <button
           type="button"
@@ -205,82 +260,120 @@ export default function BannerFormPage() {
             onClick={handleBack}
             disabled={saving}
           >
-            Cancelar
+            {isArchived ? "Volver" : "Cancelar"}
           </Button>
-          <Button type="submit" disabled={saving}>
-            {saving
-              ? "Guardando..."
-              : isEditing
-                ? "Guardar cambios"
-                : "Crear banner"}
-          </Button>
+          {!isArchived && (
+            <Button type="submit" disabled={saving}>
+              {saving
+                ? "Guardando..."
+                : isEditing
+                  ? "Guardar cambios"
+                  : "Crear banner"}
+            </Button>
+          )}
         </div>
       </div>
 
       <div className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-2xl p-6 space-y-6 shadow-xs">
-        <div>
-          <h2 className="text-xl font-bold text-[var(--color-text-primary)]">
-            {isEditing ? "Editar Banner" : "Nuevo Banner"}
-          </h2>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">
-            Configurá la ubicación, imagen y llamada a la acción para la tienda
-            pública.
-          </p>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-[var(--color-text-primary)]">
+              {isEditing ? "Editar Banner" : "Nuevo Banner"}
+            </h2>
+            <p className="text-sm text-[var(--color-text-muted)] mt-1">
+              Configurá la ubicación, programación temporal y enlaces para la
+              tienda pública.
+            </p>
+          </div>
+
+          {isArchived && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-zinc-500/10 text-zinc-500 border border-zinc-500/30">
+              <Lock className="w-3.5 h-3.5" />
+              Banner Archivado (Solo lectura)
+            </span>
+          )}
         </div>
 
-        <Input
-          label="Nombre interno del banner"
-          value={form.name}
-          onChange={(e) => handleFieldChange("name", e.target.value)}
-          placeholder="Ej: Promo Envío Gratis Octubre..."
-          required
-          autoFocus
-        />
+        {/* Nombre y Estado inicial */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="sm:col-span-2">
+            <Input
+              label="Nombre interno del banner"
+              value={form.name}
+              onChange={(e) => handleFieldChange("name", e.target.value)}
+              placeholder="Ej: Promo Envío Gratis Octubre..."
+              disabled={isArchived}
+              required
+              autoFocus
+            />
+          </div>
+          <div>
+            <DropdownSelect
+              label="Estado inicial"
+              value={form.status}
+              onChange={(val) => handleFieldChange("status", val)}
+              disabled={isArchived}
+              options={[
+                { value: "draft", label: "Borrador" },
+                { value: "active", label: "Activo" },
+              ]}
+            />
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <DropdownSelect
-              label="Ranura / Espacio"
-              value={form.slotKey}
-              onChange={(val) => handleFieldChange("slotKey", val)}
-              options={BANNER_SLOTS.map((s) => ({
-                value: s.key,
-                label: s.label,
-              }))}
-              disabled={isEditing}
-              placeholder="Seleccionar ranura..."
-            />
-          </div>
-
-          <div>
-            <DropdownSelect
-              label="Campaña asociada (opcional)"
-              value={form.campaignId || ""}
-              onChange={(val) => handleFieldChange("campaignId", val)}
-              options={[
-                { value: "", label: "Ninguna (Permanente / Manual)" },
-                ...campaigns.map((c) => ({
-                  value: String(c.id),
-                  label: c.name,
-                })),
-              ]}
-              placeholder="Seleccionar campaña..."
-            />
-          </div>
-        </div>
-
-        {/* Imagen */}
-        <div>
-          <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-            Imagen del banner
-          </label>
-          <ImageUpload
-            images={form.config.imageUrl ? [form.config.imageUrl] : []}
-            onChange={(imgs) => handleConfigChange("imageUrl", imgs[0] || null)}
-            max={1}
-            folder="banners"
+          <DropdownSelect
+            label="Ranura / Espacio"
+            value={form.slotKey}
+            onChange={handleSlotChange}
+            options={slotOptions}
+            disabled={isEditing || isArchived}
+            placeholder="Seleccionar ranura..."
           />
+          <div className="hidden sm:block" />
         </div>
+
+        {/* Info del Slot */}
+        {currentSlotDef && (
+          <div className="flex items-start gap-2.5 p-3 text-xs text-[var(--color-text-secondary)] bg-[var(--color-bg-elevated)]/60 border border-[var(--color-border)] rounded-xl">
+            <Info className="w-4 h-4 shrink-0 text-primary mt-0.5" />
+            <div>
+              <p>{currentSlotDef.description}</p>
+              <p className="mt-1 font-medium text-[var(--color-text-primary)]">
+                Medida recomendada: {currentSlotDef.recommendedSize}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Campaña y Rango de Fechas */}
+        <CampaignScheduleFields
+          campaignId={form.campaignId}
+          startAt={form.startAt}
+          endAt={form.endAt}
+          campaigns={campaigns}
+          disabled={isArchived}
+          onChange={(updates) => setForm((prev) => ({ ...prev, ...updates }))}
+        />
+
+        {/* Imagen del Banner */}
+        {form.slotKey !== "top_bar" && (
+          <div>
+            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
+              Imagen del banner
+            </label>
+            <ImageUpload
+              images={form.config.imageUrl ? [form.config.imageUrl] : []}
+              onChange={(imgs) =>
+                handleConfigChange("imageUrl", imgs[0] || null)
+              }
+              disabled={isArchived}
+              max={1}
+              folder="banners"
+              cols={3}
+            />
+          </div>
+        )}
 
         {/* Textos y CTA */}
         <div className="p-4 bg-[var(--color-bg-elevated)]/40 rounded-xl space-y-4 border border-[var(--color-border)]">
@@ -292,6 +385,7 @@ export default function BannerFormPage() {
             value={form.config.title}
             onChange={(e) => handleConfigChange("title", e.target.value)}
             placeholder="Ej: 20% OFF en Tartas Frutales"
+            disabled={isArchived}
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
@@ -299,68 +393,26 @@ export default function BannerFormPage() {
               value={form.config.subtitle}
               onChange={(e) => handleConfigChange("subtitle", e.target.value)}
               placeholder="Válido abonando en efectivo"
+              disabled={isArchived}
             />
             <Input
               label="Texto del botón (CTA)"
               value={form.config.buttonText}
               onChange={(e) => handleConfigChange("buttonText", e.target.value)}
               placeholder="Ej: Ver promociones"
+              disabled={isArchived}
             />
           </div>
         </div>
 
-        {/* Destino del Enlace */}
+        {/* Selector de Destino */}
         <div className="space-y-4">
-          <div>
-            <DropdownSelect
-              label="Destino del clic"
-              value={form.linkType || "none"}
-              onChange={(val) => handleFieldChange("linkType", val)}
-              options={LINK_TYPES}
-              placeholder="Seleccionar destino..."
-            />
-          </div>
-
-          {form.linkType === "category" && (
-            <ResourceSearchTrigger
-              label="Categoría vinculada"
-              scope="categories"
-              selectedId={form.categoryId}
-              selectedName={
-                categories.find((c) => String(c.id) === String(form.categoryId))
-                  ?.name
-              }
-              onSelect={(cat) => handleFieldChange("categoryId", cat.id)}
-              onClear={() => handleFieldChange("categoryId", "")}
-            />
-          )}
-
-          {form.linkType === "product" && (
-            <ResourceSearchTrigger
-              label="Producto específico vinculado"
-              scope="products"
-              selectedId={form.productId}
-              selectedName={form.productName} // o resuelto por ID
-              onSelect={(prod) => {
-                handleFieldChange("productId", prod.id);
-                handleFieldChange("productName", prod.name);
-              }}
-              onClear={() => {
-                handleFieldChange("productId", "");
-                handleFieldChange("productName", "");
-              }}
-            />
-          )}
-
-          {form.linkType === "external" && (
-            <Input
-              label="URL Externa"
-              value={form.externalUrl}
-              onChange={(e) => handleFieldChange("externalUrl", e.target.value)}
-              placeholder="https://instagram.com/..."
-              required
-            />
-          )}
+          <LinkDestinationSelector
+            values={form}
+            allowedLinks={allowedLinks}
+            disabled={isArchived}
+            onChange={(updates) => setForm((prev) => ({ ...prev, ...updates }))}
+          />
         </div>
       </div>
     </form>

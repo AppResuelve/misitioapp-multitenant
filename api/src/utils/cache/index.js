@@ -1,3 +1,4 @@
+// src/utils/cache/index.js
 const { LRUCache } = require("lru-cache");
 
 const createMemoryCache = ({ max = 500, ttlMs = 1000 * 60 * 15 } = {}) => {
@@ -19,16 +20,25 @@ const createMemoryCache = ({ max = 500, ttlMs = 1000 * 60 * 15 } = {}) => {
       if (!key) return;
       cache.delete(String(key).toLowerCase().trim());
     },
+    // Método útil para invalidar por prefijo (ej: todos los productos de un tenant)
+    delPrefix: (prefix) => {
+      if (!prefix) return;
+      const cleanPrefix = String(prefix).toLowerCase().trim();
+      for (const key of cache.keys()) {
+        if (key.startsWith(cleanPrefix)) {
+          cache.delete(key);
+        }
+      }
+    },
     clear: () => cache.clear(),
   };
 };
 
-// Instancias compartidas para toda la aplicación
-const settingsCache = createMemoryCache({ max: 1000, ttlMs: 1000 * 60 * 15 }); // 15 min
-const tenantCache = createMemoryCache({ max: 500, ttlMs: 1000 * 60 * 5 }); // 5 min
-
 module.exports = {
   createMemoryCache,
-  settingsCache,
-  tenantCache,
+  ...require("./memoryCache"),
+  ...require("./settingsCache"),
+  ...require("./tenantCache"),
+  ...require("./bootstrapCache"),
+  ...require("./productsCache"),
 };

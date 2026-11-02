@@ -1,37 +1,68 @@
-const tagsService = require('../../services/admin/tags.service')
+const tagsService = require("../../services/admin/tags.service");
 
 const list = async (req, res, next) => {
   try {
-    const tags = await tagsService.list(req.tenant.id)
-    res.json(tags)
-  } catch (err) { next(err) }
-}
+    const tags = await tagsService.list(req.tenant.id);
+    res.json(tags);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getActiveTags = async (req, res, next) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const tags = await tagsService.getActiveTagsWithValues(tenantId);
+
+    return res.json({
+      success: true,
+      data: tags,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 const create = async (req, res, next) => {
   try {
-    const tag = await tagsService.create(req.tenant.id, req.body)
-    res.status(201).json(tag)
-  } catch (err) { next(err) }
-}
+    const tag = await tagsService.create(req.tenant.id, req.body);
+    res.status(201).json(tag);
+  } catch (err) {
+    next(err);
+  }
+};
 
 const update = async (req, res, next) => {
   try {
-    const result = await tagsService.update(req.tenant.id, req.params.id, req.body, req.query.force === 'true')
+    const result = await tagsService.update(
+      req.tenant.id,
+      req.params.id,
+      req.body,
+      req.query.force === "true",
+    );
     if (result?.conflict) {
-      return res.status(409).json(result.conflict)
+      return res.status(409).json(result.conflict);
     }
-    res.json(result)
-  } catch (err) { next(err) }
-}
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
 
 const remove = async (req, res, next) => {
   try {
-    const result = await tagsService.remove(req.tenant.id, req.params.id, req.query.force === 'true')
+    const result = await tagsService.remove(
+      req.tenant.id,
+      req.params.id,
+      req.query.force === "true",
+    );
     if (result && result.requiresConfirmation) {
-      return res.status(409).json(result)
+      return res.status(409).json(result);
     }
-    res.status(204).end()
-  } catch (err) { next(err) }
-}
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+};
 
-module.exports = { list, create, update, remove }
+module.exports = { list, getActiveTags, create, update, remove };

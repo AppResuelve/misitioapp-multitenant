@@ -2,13 +2,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, X, Package, FolderTree } from "lucide-react";
+import { Plus, X, Package, FolderTree, Calendar, Layers } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
 import { useCampaigns } from "@/hooks/admin-useCampaigns";
 import {
   Button,
   Input,
-  Select,
   DropdownSelect,
   Modal,
   Checkbox,
@@ -20,6 +19,7 @@ import {
   DISCOUNT_MESSAGES,
 } from "@/constants/discounts";
 import { toLocalDatetimeInput } from "@/utils/date";
+import { getCampaignSelectOptions } from "@/utils/campaignOptions";
 
 export default function DiscountModal({
   open,
@@ -34,11 +34,9 @@ export default function DiscountModal({
   const Alert = useAlert();
   const { campaigns } = useCampaigns();
 
-  // Estados locales para los modales de búsqueda
   const [categorySearchOpen, setCategorySearchOpen] = useState(false);
   const [productSearchOpen, setProductSearchOpen] = useState(false);
 
-  // Guardamos nombres de items seleccionados para renderizar badges legibles
   const [selectedItemLabels, setSelectedItemLabels] = useState<
     Record<string, string>
   >({});
@@ -50,27 +48,24 @@ export default function DiscountModal({
     );
   }, [form.campaignId, campaigns]);
 
-  const campaignOptions = useMemo(() => {
-    return [
-      { value: "", label: "Ninguna (Permanente / General)" },
-      ...campaigns.map((c) => ({
-        value: String(c.id),
-        label: c.name,
-      })),
-    ];
-  }, [campaigns]);
+  const campaignOptions = useMemo(
+    () => getCampaignSelectOptions(campaigns, form.campaignId),
+    [campaigns, form.campaignId],
+  );
 
   const handleCampaignChange = (campaignIdStr: string) => {
-    setField("campaignId", campaignIdStr);
-    if (campaignIdStr) {
-      const selectedCamp = campaigns.find(
-        (c) => String(c.id) === String(campaignIdStr),
-      );
+    const nextVal = campaignIdStr ? String(campaignIdStr) : "";
+    setField("campaignId", nextVal);
+
+    if (nextVal) {
+      const selectedCamp = campaigns.find((c) => String(c.id) === nextVal);
       if (selectedCamp) {
-        if (selectedCamp.startsAt)
+        if (selectedCamp.startsAt) {
           setField("startAt", toLocalDatetimeInput(selectedCamp.startsAt));
-        if (selectedCamp.endsAt)
+        }
+        if (selectedCamp.endsAt) {
           setField("endAt", toLocalDatetimeInput(selectedCamp.endsAt));
+        }
       }
     }
   };
@@ -136,7 +131,7 @@ export default function DiscountModal({
   };
 
   const validateAndSave = () => {
-    if (!form.name.trim()) {
+    if (!form.name?.trim()) {
       Alert.fire({ message: DISCOUNT_MESSAGES.NAME_REQUIRED, type: "warning" });
       return;
     }
@@ -150,7 +145,8 @@ export default function DiscountModal({
       return;
     }
 
-    if (!form.startAt) {
+    // Fechas obligatorias solo si no tiene campaña (la campaña ya valida sus fechas)
+    if (!form.campaignId && !form.startAt) {
       Alert.fire({
         message: DISCOUNT_MESSAGES.START_DATE_REQUIRED,
         type: "warning",
@@ -158,7 +154,11 @@ export default function DiscountModal({
       return;
     }
 
-    if (form.endAt && new Date(form.endAt) < new Date(form.startAt)) {
+    if (
+      form.endAt &&
+      form.startAt &&
+      new Date(form.endAt) < new Date(form.startAt)
+    ) {
       Alert.fire({
         message: DISCOUNT_MESSAGES.END_DATE_INVALID,
         type: "warning",
@@ -166,7 +166,10 @@ export default function DiscountModal({
       return;
     }
 
-    if (form.type === "category" && form.categoryIds.length === 0) {
+    if (
+      form.type === "category" &&
+      (!form.categoryIds || form.categoryIds.length === 0)
+    ) {
       Alert.fire({
         message: DISCOUNT_MESSAGES.CATEGORIES_REQUIRED,
         type: "warning",
@@ -174,7 +177,10 @@ export default function DiscountModal({
       return;
     }
 
-    if (form.type === "products" && form.productIds.length === 0) {
+    if (
+      form.type === "products" &&
+      (!form.productIds || form.productIds.length === 0)
+    ) {
       Alert.fire({
         message: DISCOUNT_MESSAGES.PRODUCTS_REQUIRED,
         type: "warning",
@@ -251,16 +257,35 @@ export default function DiscountModal({
               value={form.campaignId || ""}
               onChange={handleCampaignChange}
               options={campaignOptions}
-              placeholder="Seleccionar campaña..."
+              placeholder="Sin campaña — Descuento Base"
             />
           </div>
+
+          {currentCampaign ? (
+            <div className="flex items-center gap-2 p-3 text-sm font-medium text-amber-800 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+              <Calendar className="w-4 h-4 shrink-0" />
+              <span>
+                Sincronizado con la campaña{" "}
+                <strong>{currentCampaign.name}</strong>. Las fechas y activación
+                se gestionan automáticamente.
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 p-3 text-xs text-[var(--color-text-secondary)] bg-[var(--color-bg-elevated)]/40 border border-[var(--color-border)] rounded-xl">
+              <Layers className="w-4 h-4 shrink-0 text-[var(--color-text-muted)]" />
+              <span>
+                <strong>Descuento Base:</strong> Permanecerá activo en la tienda
+                sin depender de ninguna campaña.
+              </span>
+            </div>
+          )}
 
           {/* Categorías con FastSearch */}
           {form.type === "category" && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-[var(--color-text-secondary)]">
-                  Categorías participantes ({form.categoryIds.length})
+                  Categorías participantes ({form.categoryIds?.length || 0})
                 </span>
                 <Button
                   type="button"
@@ -273,7 +298,7 @@ export default function DiscountModal({
                 </Button>
               </div>
 
-              {form.categoryIds.length > 0 ? (
+              {form.categoryIds && form.categoryIds.length > 0 ? (
                 <div className="flex flex-wrap gap-2 p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-base)]">
                   {form.categoryIds.map((id) => (
                     <span
@@ -309,7 +334,7 @@ export default function DiscountModal({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-[var(--color-text-secondary)]">
-                  Productos participantes ({form.productIds.length})
+                  Productos participantes ({form.productIds?.length || 0})
                 </span>
                 <Button
                   type="button"
@@ -322,7 +347,7 @@ export default function DiscountModal({
                 </Button>
               </div>
 
-              {form.productIds.length > 0 ? (
+              {form.productIds && form.productIds.length > 0 ? (
                 <div className="flex flex-wrap gap-2 p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-base)] max-h-48 overflow-y-auto">
                   {form.productIds.map((id) => (
                     <span
@@ -410,13 +435,15 @@ export default function DiscountModal({
               type="datetime-local"
               value={form.startAt}
               onChange={(e) => handleDateChange("startAt", e.target.value)}
-              required
+              disabled={Boolean(form.campaignId)}
+              required={!form.campaignId}
             />
             <Input
               label="Fecha y hora de fin (opcional)"
               type="datetime-local"
               value={form.endAt}
               onChange={(e) => handleDateChange("endAt", e.target.value)}
+              disabled={Boolean(form.campaignId)}
             />
           </div>
 
@@ -443,7 +470,6 @@ export default function DiscountModal({
         </div>
       </Modal>
 
-      {/* Modal buscador de categorías */}
       <FastSearchModal
         open={categorySearchOpen}
         onClose={() => setCategorySearchOpen(false)}
@@ -452,7 +478,6 @@ export default function DiscountModal({
         onSelect={(item) => handleSelectResource(item, "category")}
       />
 
-      {/* Modal buscador de productos */}
       <FastSearchModal
         open={productSearchOpen}
         onClose={() => setProductSearchOpen(false)}

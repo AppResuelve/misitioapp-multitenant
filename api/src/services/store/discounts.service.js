@@ -1,5 +1,5 @@
 // services/store/discounts.service.js
-const { Discount, Category } = require("../../models");
+const { Discount, Category, Campaign } = require("../../models");
 const { Op } = require("sequelize");
 const {
   appliesToProduct,
@@ -7,19 +7,44 @@ const {
   resolveProductPricing,
 } = require("../../utils/discountApplication");
 
-// Devuelve los descuentos activos (status active + dentro de la ventana temporal).
+/**
+ * Devuelve los descuentos activos considerando la jerarquía de campaña.
+ */
 const getActiveDiscounts = async (tenantId) => {
   try {
     const now = new Date();
+
     const discounts = await Discount.findAll({
       where: {
         tenantId,
         status: "active",
-        startAt: { [Op.lte]: now },
-        [Op.or]: [{ endAt: null }, { endAt: { [Op.gte]: now } }],
+        [Op.or]: [
+          // Caso A: Asociado a campaña (la vigencia la manda la campaña activa)
+          {
+            campaignId: { [Op.ne]: null },
+            "$campaign.status$": "active",
+            "$campaign.starts_at$": { [Op.lte]: now },
+            "$campaign.ends_at$": { [Op.gte]: now },
+          },
+          // Caso B: Sin campaña (evalúa sus propias fechas)
+          {
+            campaignId: null,
+            startAt: { [Op.lte]: now },
+            [Op.or]: [{ endAt: null }, { endAt: { [Op.gte]: now } }],
+          },
+        ],
       },
+      include: [
+        {
+          model: Campaign,
+          as: "campaign",
+          attributes: ["id", "status", "startsAt", "endsAt"],
+          required: false,
+        },
+      ],
       order: [["createdAt", "ASC"]],
     });
+
     return discounts;
   } catch (err) {
     console.error(
@@ -37,7 +62,6 @@ const getActiveDiscounts = async (tenantId) => {
 const formatActivePromotions = async (tenantId, discounts) => {
   if (!discounts || discounts.length === 0) return [];
 
-  // Buscamos categorías si hay descuentos por categoría para obtener nombres/slugs
   const categoryIds = discounts
     .filter(
       (d) => d.type === "category" && Array.isArray(d.config?.categoryIds),

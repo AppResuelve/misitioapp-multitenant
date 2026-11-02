@@ -1,5 +1,18 @@
-const { Campaign, Discount, SiteContent } = require("../../models");
+const { Op } = require("sequelize");
+const { Campaign, Discount, SiteContent, sequelize } = require("../../models");
 const { slugify } = require("../../utils/slugify");
+const {
+  invalidateBootstrapCache,
+} = require("../../utils/cache/bootstrapCache");
+const { invalidateTenantProducts } = require("../../utils/cache/productsCache");
+// Se requiere de forma diferida o lazy si hay dependencia circular con scheduler
+let campaignScheduler = null;
+const getScheduler = () => {
+  if (!campaignScheduler) {
+    campaignScheduler = require("../../scheduler/campaignScheduler");
+  }
+  return campaignScheduler;
+};
 
 /**
  * Calcula el estado temporal en tiempo de ejecución
@@ -121,6 +134,13 @@ const create = async (tenantId, data) => {
     color: data.color || "#6366f1",
   });
 
+  // Si se crea directamente como activa, registrar en scheduler
+  if (campaign.status === "active") {
+    getScheduler().register(campaign);
+    invalidateBootstrapCache(tenantId);
+    invalidateTenantProducts(tenantId);
+  }
+
   const json = campaign.toJSON();
   return {
     ...json,
@@ -132,6 +152,13 @@ const update = async (tenantId, id, data) => {
   const campaign = await Campaign.findOne({ where: { tenantId, id } });
   if (!campaign) {
     throw Object.assign(new Error("Campaña no encontrada"), { status: 404 });
+  }
+
+  if (campaign.status === "archived") {
+    throw Object.assign(
+      new Error("No se puede editar una campaña archivada."),
+      { status: 400 },
+    );
   }
 
   const payload = {};
@@ -156,12 +183,12 @@ const update = async (tenantId, id, data) => {
     payload.description = data.description ? data.description.trim() : null;
   }
 
-  // Validación cruzada de fechas si se actualiza una o ambas
   const nextStart =
     data.startsAt !== undefined ? new Date(data.startsAt) : campaign.startsAt;
   const nextEnd =
     data.endsAt !== undefined ? new Date(data.endsAt) : campaign.endsAt;
 
+  let datesChanged = false;
   if (data.startsAt !== undefined || data.endsAt !== undefined) {
     if (isNaN(nextStart.getTime()) || isNaN(nextEnd.getTime())) {
       throw Object.assign(new Error("Formato de fecha inválido"), {
@@ -174,19 +201,83 @@ const update = async (tenantId, id, data) => {
         { status: 400 },
       );
     }
-    if (data.startsAt !== undefined) payload.startsAt = nextStart;
-    if (data.endsAt !== undefined) payload.endsAt = nextEnd;
-  }
-
-  if (data.status !== undefined) {
-    payload.status = data.status;
+    payload.startsAt = nextStart;
+    payload.endsAt = nextEnd;
+    datesChanged = true;
   }
 
   if (data.color !== undefined) {
     payload.color = data.color || "#6366f1";
   }
 
-  await campaign.update(payload);
+  const statusChanged =
+    data.status !== undefined && data.status !== campaign.status;
+
+  const transaction = await sequelize.transaction();
+  try {
+    if (data.status !== undefined) {
+      payload.status = data.status;
+    }
+
+    await campaign.update(payload, { transaction });
+
+    // Si cambió el status vía update general, propagar a los hijos
+    if (statusChanged) {
+      if (data.status === "active") {
+        await Discount.update(
+          { status: "active" },
+          { where: { campaignId: id, tenantId, status: "draft" }, transaction },
+        );
+        await SiteContent.update(
+          { status: "active" },
+          { where: { campaignId: id, tenantId, status: "draft" }, transaction },
+        );
+      } else if (data.status === "draft") {
+        await Discount.update(
+          { status: "draft" },
+          {
+            where: { campaignId: id, tenantId, status: "active" },
+            transaction,
+          },
+        );
+        await SiteContent.update(
+          { status: "draft" },
+          {
+            where: { campaignId: id, tenantId, status: "active" },
+            transaction,
+          },
+        );
+      } else if (data.status === "archived") {
+        await Discount.update(
+          { status: "archived" },
+          { where: { campaignId: id, tenantId }, transaction },
+        );
+        await SiteContent.update(
+          { status: "archived" },
+          { where: { campaignId: id, tenantId }, transaction },
+        );
+      }
+    }
+
+    await transaction.commit();
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+
+  // Sincronizar scheduler y caché según los cambios
+  if (campaign.status === "archived") {
+    getScheduler().cancel(campaign.id);
+  } else if (statusChanged || datesChanged) {
+    if (campaign.status === "active") {
+      getScheduler().register(campaign);
+    } else {
+      getScheduler().cancel(campaign.id);
+    }
+  }
+
+  invalidateBootstrapCache(tenantId);
+  invalidateTenantProducts(tenantId);
 
   const json = campaign.toJSON();
   return {
@@ -196,11 +287,151 @@ const update = async (tenantId, id, data) => {
 };
 
 const remove = async (tenantId, id) => {
-  const campaign = await Campaign.findOne({ where: { tenantId, id } });
-  if (!campaign) {
-    throw Object.assign(new Error("Campaña no encontrada"), { status: 404 });
+  const transaction = await sequelize.transaction();
+  try {
+    const campaign = await Campaign.findOne({
+      where: { tenantId, id },
+      transaction,
+    });
+
+    if (!campaign) {
+      throw Object.assign(new Error("Campaña no encontrada"), { status: 404 });
+    }
+
+    // 1. Apagar y desvincular descuentos dependientes
+    await Discount.update(
+      { status: "draft", campaignId: null },
+      { where: { campaignId: id, tenantId }, transaction },
+    );
+
+    // 2. Apagar y desvincular contenidos dependientes
+    await SiteContent.update(
+      { status: "draft", campaignId: null },
+      { where: { campaignId: id, tenantId }, transaction },
+    );
+
+    // 3. Eliminar la campaña
+    await campaign.destroy({ transaction });
+
+    await transaction.commit();
+
+    getScheduler().cancel(id);
+    invalidateBootstrapCache(tenantId);
+    invalidateTenantProducts(tenantId);
+
+    return true;
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
   }
-  return campaign.destroy();
+};
+
+/**
+ * Activa la campaña y sus recursos hijos
+ */
+const activate = async (campaignId) => {
+  const transaction = await sequelize.transaction();
+  let updatedCampaign = null;
+  try {
+    const campaign = await Campaign.findByPk(campaignId, { transaction });
+    if (!campaign || campaign.status === "archived") {
+      await transaction.rollback();
+      return null;
+    }
+
+    await campaign.update({ status: "active" }, { transaction });
+
+    // Pasan a active los hijos en draft
+    await Discount.update(
+      { status: "active" },
+      {
+        where: {
+          campaignId,
+          tenantId: campaign.tenantId,
+          status: "draft",
+        },
+        transaction,
+      },
+    );
+
+    await SiteContent.update(
+      { status: "active" },
+      {
+        where: {
+          campaignId,
+          tenantId: campaign.tenantId,
+          status: "draft",
+        },
+        transaction,
+      },
+    );
+
+    await transaction.commit();
+    updatedCampaign = campaign;
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+
+  getScheduler().register(updatedCampaign);
+  invalidateBootstrapCache(updatedCampaign.tenantId);
+  invalidateTenantProducts(updatedCampaign.tenantId);
+
+  return updatedCampaign;
+};
+
+/**
+ * Archiva la campaña y archiva sus recursos hijos
+ */
+const archive = async (campaignId) => {
+  const transaction = await sequelize.transaction();
+  let updatedCampaign = null;
+  try {
+    const campaign = await Campaign.findByPk(campaignId, { transaction });
+    if (!campaign || campaign.status === "archived") {
+      await transaction.rollback();
+      return null;
+    }
+
+    await campaign.update({ status: "archived" }, { transaction });
+
+    // Se archivan los recursos dependientes
+    await Discount.update(
+      { status: "archived" },
+      {
+        where: {
+          campaignId,
+          tenantId: campaign.tenantId,
+          status: { [Op.in]: ["active", "draft"] },
+        },
+        transaction,
+      },
+    );
+
+    await SiteContent.update(
+      { status: "archived" },
+      {
+        where: {
+          campaignId,
+          tenantId: campaign.tenantId,
+          status: { [Op.in]: ["active", "draft"] },
+        },
+        transaction,
+      },
+    );
+
+    await transaction.commit();
+    updatedCampaign = campaign;
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+
+  getScheduler().cancel(campaignId);
+  invalidateBootstrapCache(updatedCampaign.tenantId);
+  invalidateTenantProducts(updatedCampaign.tenantId);
+
+  return updatedCampaign;
 };
 
 const toggleStatus = async (tenantId, id) => {
@@ -209,10 +440,44 @@ const toggleStatus = async (tenantId, id) => {
     throw Object.assign(new Error("Campaña no encontrada"), { status: 404 });
   }
 
-  const nextStatus = campaign.status === "active" ? "draft" : "active";
-  await campaign.update({ status: nextStatus });
+  if (campaign.status === "archived") {
+    throw Object.assign(
+      new Error("Una campaña archivada no puede conmutarse directamente."),
+      { status: 400 },
+    );
+  }
 
-  const json = campaign.toJSON();
+  let updated;
+  if (campaign.status === "active") {
+    const transaction = await sequelize.transaction();
+    try {
+      await campaign.update({ status: "draft" }, { transaction });
+
+      await Discount.update(
+        { status: "draft" },
+        { where: { campaignId: id, tenantId, status: "active" }, transaction },
+      );
+
+      await SiteContent.update(
+        { status: "draft" },
+        { where: { campaignId: id, tenantId, status: "active" }, transaction },
+      );
+
+      await transaction.commit();
+      updated = campaign;
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+
+    getScheduler().cancel(id);
+    invalidateBootstrapCache(tenantId);
+    invalidateTenantProducts(tenantId);
+  } else {
+    updated = await activate(id);
+  }
+
+  const json = updated.toJSON();
   return {
     ...json,
     timingStatus: getTimingStatus(json.startsAt, json.endsAt),
@@ -226,4 +491,6 @@ module.exports = {
   update,
   remove,
   toggleStatus,
+  activate,
+  archive,
 };

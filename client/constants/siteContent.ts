@@ -1,5 +1,6 @@
-export const MAX_ITEMS_PER_SLOT = 6;
-export const MAX_SLIDES_PER_CAROUSEL = 6;
+export const MAX_ITEMS_PER_SLOT = 3;
+export const MAX_SLIDES_PER_CAROUSEL = 3;
+
 export const BANNER_SLOTS = [
   {
     key: "top_bar",
@@ -37,6 +38,13 @@ export const CAROUSEL_SLOTS = [
     recommendedSize: "1920x700px (Desktop) / 800x800px (Mobile)",
   },
   {
+    key: "featured_products",
+    label: "Carrusel de Productos Destacados",
+    description:
+      "Vitrina deslizable de tarjetas de producto con precio y compra.",
+    recommendedSize: "Configuración por Tag o Selección manual de catálogo",
+  },
+  {
     key: "brand_carousel",
     label: "Carrusel de Marcas / Logos",
     description: "Tira deslizante horizontal de marcas o proveedores aliados.",
@@ -51,6 +59,76 @@ export const CAROUSEL_SLOTS = [
       "Imágenes cuadradas 400x400px o formato vertical 1080x1920px",
   },
 ] as const;
+
+export const createEmptySlide = () => ({
+  id:
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : String(Date.now() + Math.random()),
+  imageUrl: null,
+  title: "",
+  subtitle: "",
+  buttonText: "",
+  linkType: "none",
+  categoryId: "",
+  categoryName: "",
+  categorySlug: "",
+  productId: "",
+  productName: "",
+  productSlug: "",
+  externalUrl: "",
+});
+
+export const EMPTY_BANNER = {
+  name: "",
+  slotKey: BANNER_SLOTS[0]?.key || "top_bar",
+  status: "draft",
+  campaignId: "",
+  startAt: "",
+  endAt: "",
+  linkType: "none",
+  categoryId: "",
+  categoryName: "",
+  productId: "",
+  productName: "",
+  externalUrl: "",
+  config: {
+    imageUrl: null,
+    title: "",
+    subtitle: "",
+    buttonText: "",
+  },
+};
+
+export const EMPTY_CAROUSEL = {
+  name: "",
+  slotKey: CAROUSEL_SLOTS[0]?.key || "hero",
+  status: "draft",
+  campaignId: "",
+  startAt: "",
+  endAt: "",
+  linkType: "none",
+  categoryId: "",
+  categoryName: "",
+  productId: "",
+  productName: "",
+  externalUrl: "",
+  config: {
+    autoplay: true,
+    interval: 5,
+    customPerSlide: false,
+    overlayTitle: "",
+    overlaySubtitle: "",
+    overlayButtonText: "",
+    // Propiedades de featured_products:
+    mode: "auto",
+    tagName: "",
+    limit: 8,
+    selectedProducts: [],
+    productIds: [],
+    slides: [createEmptySlide()],
+  },
+};
 
 export const LINK_TYPES = [
   { value: "none", label: "Sin enlace" },
@@ -73,4 +151,16 @@ export const SITE_CONTENT_MESSAGES = {
   SAVE_ERROR: "Error al guardar el contenido",
   DELETE_ERROR: "No se pudo eliminar el contenido",
   STATUS_ERROR: "Error al alternar el estado del contenido",
+  UNLINK_CAMPAIGN_TITLE: "Desasociar campaña",
+  UNLINK_CAMPAIGN_WARNING: (campaignName: string) =>
+    `Este elemento está vinculado a "${campaignName}". Modificar la fecha o la configuración desvinculará la campaña. ¿Deseás continuar?`,
+  CONFIRM_UNLINK_BTN: "Desasociar y cambiar",
+  CANCEL_UNLINK_BTN: "Mantener campaña",
+  // Textos de ayuda para la selección y fallback de productos
+  FEATURED_MODE_HELP: {
+    tag: "Se mostrarán los productos que tengan este tag. Si no hay suficientes, se completará con los últimos productos agregados.",
+    manual:
+      "Se mostrarán únicamente los productos seleccionados que permanezcan activos y con stock.",
+    auto: "Prioriza los productos con más pedidos. Si la tienda es nueva y no tiene ventas, mostrará las últimas novedades.",
+  },
 };

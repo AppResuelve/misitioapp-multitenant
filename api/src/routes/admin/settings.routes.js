@@ -1,8 +1,13 @@
-const settingsController = require('../../controllers/admin/settings.controller')
+const router = require("express").Router();
+const settingsController = require("../../controllers/admin/settings.controller");
+const invalidateCache = require("../../middleware/invalidateCache");
+const {
+  invalidateBootstrapCache,
+} = require("../../utils/cache/bootstrapCache");
 
-const router = require('express').Router()
+router.get("/", settingsController.getAll);
+// A partir de acá, TODO lo que esté abajo pasa automáticamente por la invalidación
+router.use(invalidateCache(invalidateBootstrapCache));
+router.put("/", settingsController.setBulk);
 
-router.get('/', settingsController.getAll)
-router.put('/', settingsController.setBulk)
-
-module.exports = router
+module.exports = router;

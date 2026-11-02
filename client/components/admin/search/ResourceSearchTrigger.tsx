@@ -8,18 +8,20 @@ import FastSearchModal from "./FastSearchModal";
 interface ResourceSearchTriggerProps {
   label: string;
   scope: "products" | "categories";
-  selectedId: string | number | null;
+  status?: "all" | "active";
+  selectedId?: string | number | null;
   selectedName?: string;
   onSelect: (item: any) => void;
-  onClear: () => void;
+  onClear?: () => void;
   placeholder?: string;
 }
 
 export default function ResourceSearchTrigger({
   label,
   scope,
-  selectedId,
-  selectedName,
+  status = "all",
+  selectedId = null,
+  selectedName = "",
   onSelect,
   onClear,
   placeholder,
@@ -53,14 +55,19 @@ export default function ResourceSearchTrigger({
             >
               Cambiar
             </button>
-            <button
-              type="button"
-              onClick={onClear}
-              className="p-1 rounded-md text-[var(--color-text-muted)] hover:text-red-500 cursor-pointer"
-              title="Quitar selección"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            {Boolean(selectedId) && onClear && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClear();
+                }}
+                className="p-1 rounded-md text-[var(--color-text-muted)] hover:text-red-500 cursor-pointer"
+                title="Quitar selección"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
       ) : (
@@ -89,6 +96,7 @@ export default function ResourceSearchTrigger({
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         scope={scope}
+        status={status}
         lockScope={true}
         onSelect={onSelect}
       />

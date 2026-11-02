@@ -1,7 +1,7 @@
-const { createMemoryCache } = require("./cache");
+const { createMemoryCache } = require("./memoryCache");
 
-// Caché para 500 tenants con TTL de 5 minutos
-const cache = createMemoryCache({ max: 500, ttlMs: 1000 * 60 * 5 });
+// Caché para 500 tenants con TTL de 60 minutos
+const cache = createMemoryCache({ max: 500, ttlMs: 1000 * 60 * 60 });
 
 const getCachedTenant = (key) => cache.get(key);
 

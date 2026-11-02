@@ -1,12 +1,16 @@
 // src/cron/billingCron.js
 const { Op } = require("sequelize");
+const cron = require("node-cron");
 const { Billing, Tenant, User } = require("../models");
 const { sendEmail, TYPES } = require("../modules/emails");
 const { adminOriginFromTenant } = require("../utils/adminOrigin");
 
 const toDateKey = (date) => new Date(date).toISOString().slice(0, 10);
 
-const runBillingCron = async () => {
+// Define su propia cadencia: Todos los días a las 00:00 hs
+const SCHEDULE = "0 3 * * *";
+
+const task = async () => {
   const now = new Date();
   console.log(`[billingCron] Chequeo diario: ${now.toISOString()}`);
 
@@ -128,4 +132,19 @@ const runBillingCron = async () => {
   );
 };
 
-module.exports = { runBillingCron };
+let scheduledTask = null;
+
+const start = () => {
+  scheduledTask = cron.schedule(SCHEDULE, task);
+  console.log(`[CRON] billingCron montado con cadencia: ${SCHEDULE}`);
+};
+
+const stop = () => {
+  if (scheduledTask) {
+    scheduledTask.stop();
+    scheduledTask = null;
+    console.log("[CRON] billingCron detenido.");
+  }
+};
+
+module.exports = { start, stop, task };

@@ -7,13 +7,14 @@ const { Product, Category } = require("../../models");
  *   - q: string (término de búsqueda)
  *   - scope: "all" | "products" | "categories" (default: "all")
  *   - limit: number (default: 10, max: 20)
+ *   - status: "all" | "active" | "draft" | "archived" (default: "all")
  */
 async function adminFastSearch(req, res) {
   try {
-    const { q = "", scope = "all", limit = 10 } = req.query;
+    const { q = "", scope = "all", limit = 10, status = "all" } = req.query;
     const term = String(q).trim();
+    const tenantId = req.tenantId || req.user?.tenantId;
 
-    // Si viene vacío o con solo espacios, retornamos lista vacía sin tocar la DB
     if (!term) {
       return res.json({ results: [] });
     }
@@ -21,34 +22,45 @@ async function adminFastSearch(req, res) {
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 20);
     const likeQuery = { [Op.iLike]: `%${term}%` };
 
+    // Cláusula base con aislamiento multitenant
+    const baseWhere = tenantId ? { tenantId } : {};
+
     let foundCategories = [];
     let foundProducts = [];
 
     // 1. Buscar Categorías si aplica
     if (scope === "all" || scope === "categories") {
+      const categoryWhere = {
+        ...baseWhere,
+        name: likeQuery,
+        ...(status !== "all" && { status }),
+      };
+
       foundCategories = await Category.findAll({
-        where: {
-          name: likeQuery,
-        },
-        attributes: ["id", "name", "slug", "image"],
+        where: categoryWhere,
+        attributes: ["id", "name", "slug", "image", "status"],
         limit: parsedLimit,
         order: [["name", "ASC"]],
       });
     }
 
-    // 2. Buscar Productos si aplica (por nombre o SKU)
+    // 2. Buscar Productos si aplica
     if (scope === "all" || scope === "products") {
+      const productWhere = {
+        ...baseWhere,
+        [Op.or]: [{ name: likeQuery }],
+        ...(status !== "all" && { status }),
+      };
+
       foundProducts = await Product.findAll({
-        where: {
-          [Op.or]: [{ name: likeQuery }],
-        },
+        where: productWhere,
         attributes: ["id", "name", "slug", "retailPrice", "images", "status"],
         limit: parsedLimit,
         order: [["name", "ASC"]],
       });
     }
 
-    // 3. Normalizar formato unificado para el FastSearchModal
+    // 3. Normalizar formato unificado
     const formattedCategories = foundCategories.map((c) => ({
       id: c.id,
       name: c.name,
@@ -56,10 +68,10 @@ async function adminFastSearch(req, res) {
       label: c.name,
       subtitle: `/${c.slug || ""}`,
       imageUrl: c.image || null,
+      status: c.status,
     }));
 
     const formattedProducts = foundProducts.map((p) => {
-      // Extrae la primera imagen si viene como arreglo o string JSON
       let mainImg = null;
       if (Array.isArray(p.images) && p.images.length > 0) {
         mainImg = p.images[0];
@@ -78,13 +90,14 @@ async function adminFastSearch(req, res) {
         type: "product",
         label: p.name,
         subtitle:
-          p.price != null ? `$${Number(p.price).toLocaleString("es-AR")}` : "",
+          p.retailPrice != null
+            ? `$${Number(p.retailPrice).toLocaleString("es-AR")}`
+            : "",
         imageUrl: mainImg,
         status: p.status,
       };
     });
 
-    // En scope 'all', intercalamos o unimos categorías primero y luego productos
     const results = [...formattedCategories, ...formattedProducts].slice(
       0,
       parsedLimit,

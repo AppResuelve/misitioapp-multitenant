@@ -3,7 +3,14 @@ const authService = require("../services/auth.service");
 const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
-    const result = await authService.login(email, password, req.tenant?.id);
+    const businessName =
+      req.storeSettings?.businessName || req.tenant?.name || "";
+    const result = await authService.login(
+      req.tenant?.id,
+      email,
+      password,
+      businessName,
+    );
     res.json(result);
   } catch (err) {
     next(err);
@@ -13,7 +20,9 @@ const login = async (req, res, next) => {
 const me = async (req, res, next) => {
   try {
     const userId = req.user.id || null;
-    const user = await authService.me(userId, req.tenant?.id);
+    const businessName =
+      req.storeSettings?.businessName || req.tenant?.name || "";
+    const user = await authService.me(req.tenant?.id, userId, businessName);
     res.json(user);
   } catch (err) {
     next(err);
@@ -69,11 +78,11 @@ const resetPassword = async (req, res, next) => {
     const { token, code, email, password } = req.body;
     const tenantId = req.tenant?.id || null;
     const result = await authService.resetPassword({
+      tenantId,
       token,
       code,
       email,
       password,
-      tenantId,
     });
     res.json(result);
   } catch (err) {

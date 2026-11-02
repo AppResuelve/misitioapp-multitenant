@@ -35,10 +35,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: false,
       },
-      config: {
-        type: DataTypes.JSONB,
+      status: {
+        type: DataTypes.ENUM("draft", "active", "archived"),
         allowNull: false,
-        defaultValue: {},
+        defaultValue: "draft",
       },
       status: {
         type: DataTypes.ENUM("draft", "active"),

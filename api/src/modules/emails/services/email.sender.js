@@ -2,6 +2,7 @@
 const brevo = require("../config/brevo");
 const { Tenant, StoreSetting, EmailLog } = require("../../../models");
 const { getSubject } = require("../utils/dinamicTexts");
+const { checkEmailRateLimit } = require("../utils/emailLimiter");
 
 const TEMPLATES = {
   ACCOUNT_SUSPENDED: require("../templates/account-suspended"),
@@ -26,6 +27,15 @@ const sendEmail = async ({
   data = {},
   branding = "appresuelve",
 }) => {
+  // 🛡️ RATE LIMIT CHECK: Evita spam o envíos masivos descontrolados
+  const limitKey = tenantId ? `tenant:${tenantId}` : `email:${targetEmail}`;
+  if (!checkEmailRateLimit(limitKey)) {
+    console.warn(
+      `[EMAIL-LIMITER] ⚠️ Límite de envíos excedido para: ${limitKey}`,
+    );
+    return { skipped: true, reason: "rate_limit_exceeded" };
+  }
+
   // 1. Si viene periodKey, garantizamos idempotencia antes de disparar a Brevo
   if (EmailLog && tenantId && periodKey) {
     const alreadySent = await EmailLog.findOne({

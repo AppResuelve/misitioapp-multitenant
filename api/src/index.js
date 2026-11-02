@@ -1,8 +1,8 @@
-const cron = require("node-cron");
 const app = require("./app");
 const { sequelize } = require("./models");
 const { validateEnv } = require("./config/env.schema");
-const { runBillingCron } = require("./cron/billingCron");
+const { initCrons, stopCrons } = require("./cron");
+const { initSchedulers, stopSchedulers } = require("./scheduler");
 
 const PORT = process.env.PORT || 3001;
 
@@ -17,24 +17,51 @@ const start = async () => {
       console.log(`Servidor corriendo en puerto ${PORT}`);
     });
 
-    // Programar el control nocturno de facturación a las 03:00 AM
-    const billingTask = cron.schedule("0 3 * * *", async () => {
-      console.log("[cron] Iniciando control de facturación diario...");
-      try {
-        await runBillingCron();
-      } catch (err) {
-        console.error("[cron] Error ejecutando runBillingCron:", err);
-      }
-    });
+    // 1. Levanta los timers específicos por fecha y resuelve atrasos
+    await initSchedulers();
+
+    // 2. Levanta los cron jobs periódicos
+    initCrons();
+
+    let isShuttingDown = false;
 
     const shutdown = async (signal) => {
-      console.log(`Recibida señal ${signal}, cerrando servidor...`);
-      if (billingTask) billingTask.stop();
-      server.close(() => {});
+      if (isShuttingDown) return;
+      isShuttingDown = true;
+
+      console.log(
+        `\n🛑 Recibida señal ${signal}. Iniciando apagado ordenado...`,
+      );
+
+      // 1. Detenemos los cron jobs para que no inicien nuevas tareas
       try {
-        await sequelize.close();
-      } catch {}
-      process.exit(0);
+        stopCrons();
+        stopSchedulers();
+      } catch (err) {
+        console.error("Error al detener crons/schedulers:", err);
+      }
+
+      // 2. Dejamos de recibir tráfico HTTP y esperamos que terminen las requests vivas
+      server.close(async () => {
+        console.log("🔒 Conexiones HTTP finalizadas.");
+
+        // 3. Cerramos el pool de conexiones a la base de datos limpiamente
+        try {
+          await sequelize.close();
+          console.log("💾 Conexión a base de datos cerrada.");
+        } catch (err) {
+          console.error("Error al cerrar base de datos:", err);
+        }
+
+        console.log("👋 Servidor apagado limpiamente.");
+        process.exit(0);
+      });
+
+      // 4. Mecanismo de seguridad: si alguna request colgada tarda más de 10s, forzar salida
+      setTimeout(() => {
+        console.error("⚠️ Forzando cierre por timeout (10s excedidos).");
+        process.exit(1);
+      }, 10000).unref();
     };
 
     process.on("SIGTERM", () => shutdown("SIGTERM"));

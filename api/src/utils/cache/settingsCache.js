@@ -1,7 +1,7 @@
-const { createMemoryCache } = require("./cache");
+const { createMemoryCache } = require("./memoryCache");
 
-// Caché para 1000 tiendas con TTL de 15 minutos
-const cache = createMemoryCache({ max: 1000, ttlMs: 1000 * 60 * 15 });
+// Caché para 1000 tiendas con TTL de 12 horas
+const cache = createMemoryCache({ max: 1000, ttlMs: 1000 * 60 * 60 * 12 });
 
 const getCachedSettings = (tenantId) => cache.get(tenantId);
 

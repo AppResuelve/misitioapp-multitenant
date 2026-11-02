@@ -14,3 +14,12 @@ export function formatDate(dateString: string) {
     minute: "2-digit",
   });
 }
+
+export const formatDateShort = (dateStr: string) => {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+  }).format(d);
+};

@@ -41,7 +41,25 @@ const proxyProductImages = (product) => {
   return product;
 };
 
+/**
+ * Aplica proxy CDN a las imágenes de configuración de la tienda (logo, favicon, etc.)
+ */
+const formatSettingsWithCdn = (settings) => {
+  if (!settings) return null;
+  const raw = settings.toJSON ? settings.toJSON() : settings;
+
+  const logoUrl = proxyAssetUrl(raw.logoUrl);
+  const faviconUrl = proxyAssetUrl(raw.faviconUrl);
+
+  return {
+    ...raw,
+    logoUrl,
+    faviconUrl,
+  };
+};
+
 module.exports = {
   proxyAssetUrl,
   proxyProductImages,
+  formatSettingsWithCdn,
 };

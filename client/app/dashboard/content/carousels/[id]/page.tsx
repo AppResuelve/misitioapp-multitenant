@@ -1,65 +1,30 @@
 // @ts-nocheck
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import {
-  ArrowLeft,
-  Plus,
-  Trash2,
-  ChevronUp,
-  ChevronDown,
-  Layers,
-  Settings2,
-} from "lucide-react";
+import { ArrowLeft, Layers, Plus, Settings2, Lock } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
 import { useUnsavedChanges } from "@/context/UnsavedChangesContext";
 import { useCampaigns } from "@/hooks/admin-useCampaigns";
-import { useCategories } from "@/hooks/admin-useCategories";
 import { useSiteContent } from "@/hooks/admin-useSiteContent";
+import { useSlotAvailability } from "@/hooks/admin-useSlotAvailability";
 import { siteContentService } from "@/services/siteContent.service";
 import { Button, DropdownSelect, Input, Spinner } from "@/components/ui";
-import ImageUpload from "@/components/admin/ImageUpload";
-import ResourceSearchTrigger from "@/components/admin/search/ResourceSearchTrigger";
+
+import CampaignScheduleFields from "@/components/admin/content/CampaignScheduleFields";
+import LinkDestinationSelector from "@/components/admin/content/LinkDestinationSelector";
+import FeaturedProductsConfig from "@/components/admin/content/FeaturedProductsConfig";
+import SlideEditor from "@/components/admin/content/SlideEditor";
+
 import {
   CAROUSEL_SLOTS,
-  LINK_TYPES,
   SITE_CONTENT_MESSAGES,
   MAX_SLIDES_PER_CAROUSEL,
+  EMPTY_CAROUSEL,
+  createEmptySlide,
 } from "@/constants/siteContent";
-
-const createEmptySlide = () => ({
-  id:
-    typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID()
-      : String(Date.now() + Math.random()),
-  imageUrl: null,
-  title: "",
-  subtitle: "",
-  buttonText: "",
-  linkType: "none",
-  categoryId: "",
-  externalUrl: "",
-});
-
-const EMPTY_CAROUSEL = {
-  name: "",
-  slotKey: CAROUSEL_SLOTS[0]?.key || "hero",
-  status: "draft",
-  campaignId: "",
-  config: {
-    autoplay: true,
-    interval: 5,
-    customPerSlide: false, // false: textos generales fijos | true: textos específicos por slide
-    overlayTitle: "",
-    overlaySubtitle: "",
-    overlayButtonText: "",
-    overlayLinkType: "none",
-    overlayCategoryId: "",
-    overlayExternalUrl: "",
-    slides: [createEmptySlide()],
-  },
-};
+import { toLocalDatetimeInput } from "@/utils/date";
 
 export default function CarouselFormPage() {
   const { id } = useParams();
@@ -68,18 +33,34 @@ export default function CarouselFormPage() {
   const Alert = useAlert();
   const { confirmLeave } = useUnsavedChanges();
 
-  const isEditing = Boolean(id) && id !== "new";
+  // Filtrar archivados para que no ocupen cupo en el selector de ranura
+  const { items: allCarousels } = useSiteContent({ kind: "carousel" });
+  const activeAndDraftCarousels = useMemo(
+    () => allCarousels.filter((c) => c.status !== "archived"),
+    [allCarousels],
+  );
 
-  const { createItem, updateItem } = useSiteContent({ kind: "carousel" });
   const { campaigns } = useCampaigns();
-  const { categories } = useCategories();
 
   const [form, setForm] = useState(EMPTY_CAROUSEL);
+  const isEditing = Boolean(id) && id !== "new";
   const [loading, setLoading] = useState(isEditing);
   const [saving, setSaving] = useState(false);
+  const isArchived = form.status === "archived";
 
   const querySlot = searchParams?.get("slotKey");
 
+  // Hook compartido para cálculo y validación de slots (solo cuenta no archivados)
+  const { slotOptions } = useSlotAvailability({
+    slots: CAROUSEL_SLOTS,
+    existingItems: activeAndDraftCarousels,
+    currentSlotKey: form.slotKey,
+    currentId: id,
+    isEditing,
+    onSelectSlot: (slotKey) => setForm((prev) => ({ ...prev, slotKey })),
+  });
+
+  // Carga inicial e hidratación limpia
   useEffect(() => {
     if (!isEditing) {
       if (querySlot) {
@@ -93,39 +74,57 @@ export default function CarouselFormPage() {
     siteContentService
       .getById(id)
       .then((data) => {
-        const slides =
+        const rawSlides =
           Array.isArray(data.config?.slides) && data.config.slides.length > 0
             ? data.config.slides
             : [createEmptySlide()];
+
+        const slides = rawSlides.map((s) => ({
+          ...createEmptySlide(),
+          ...s,
+          categoryId: s.categoryId ? String(s.categoryId) : "",
+          productId: s.productId ? String(s.productId) : "",
+        }));
+
+        const savedConfig = data.config || {};
 
         setForm({
           name: data.name || "",
           slotKey: data.slotKey || CAROUSEL_SLOTS[0]?.key,
           status: data.status || "draft",
           campaignId: data.campaignId ? String(data.campaignId) : "",
+          startAt: data.startsAt ? toLocalDatetimeInput(data.startsAt) : "",
+          endAt: data.endsAt ? toLocalDatetimeInput(data.endsAt) : "",
+          linkType: data.linkType || "none",
+          categoryId: data.categoryId ? String(data.categoryId) : "",
+          categoryName: data.category?.name || "",
+          productId: data.productId ? String(data.productId) : "",
+          productName: data.product?.name || "",
+          externalUrl: data.externalUrl || "",
           config: {
-            autoplay: data.config?.autoplay !== false,
-            interval: data.config?.interval || 5,
-            customPerSlide: Boolean(data.config?.customPerSlide),
-            overlayTitle: data.config?.overlayTitle || "",
-            overlaySubtitle: data.config?.overlaySubtitle || "",
-            overlayButtonText: data.config?.overlayButtonText || "",
-            overlayLinkType: data.config?.overlayLinkType || "none",
-            overlayCategoryId: data.config?.overlayCategoryId
-              ? String(data.config.overlayCategoryId)
-              : "",
-            overlayExternalUrl: data.config?.overlayExternalUrl || "",
+            ...EMPTY_CAROUSEL.config,
+            ...savedConfig,
+            mode: savedConfig.mode || "auto",
+            tagName: savedConfig.tagName || "",
+            limit: Number(savedConfig.limit) || 8,
+            selectedProducts: savedConfig.selectedProducts || [],
+            productIds: savedConfig.productIds || [],
+            autoplay: savedConfig.autoplay !== false,
+            interval: savedConfig.interval || 5,
+            customPerSlide: Boolean(savedConfig.customPerSlide),
+            overlayTitle: savedConfig.overlayTitle || "",
+            overlaySubtitle: savedConfig.overlaySubtitle || "",
+            overlayButtonText: savedConfig.overlayButtonText || "",
             slides,
           },
         });
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error("Error cargando carrusel:", err);
         Alert.fire({ message: "No se encontró el carrusel", type: "error" });
         router.push("/dashboard/content/carousels");
       })
-      .finally(() => {
-        setLoading(false);
-      });
+      .finally(() => setLoading(false));
   }, [id, isEditing, querySlot, router, Alert]);
 
   const handleBack = async (e: React.MouseEvent) => {
@@ -142,18 +141,23 @@ export default function CarouselFormPage() {
   const handleConfigChange = (key: string, value: any) => {
     setForm((prev) => ({
       ...prev,
-      config: {
-        ...prev.config,
-        [key]: value,
-      },
+      config: { ...prev.config, [key]: value },
     }));
   };
 
-  // Manejo de Diapositivas con tope de 6
+  const handleConfigBulkChange = (updates: Record<string, any>) => {
+    setForm((prev) => ({
+      ...prev,
+      config: { ...prev.config, ...updates },
+    }));
+  };
+
+  // Gestor de diapositivas
   const addSlide = () => {
+    if (isArchived) return;
     if (form.config.slides.length >= MAX_SLIDES_PER_CAROUSEL) {
       Alert.fire({
-        message: `El carrusel admite un límite máximo de ${MAX_SLIDES_PER_CAROUSEL} diapositivas.`,
+        message: `El carrusel admite un máximo de ${MAX_SLIDES_PER_CAROUSEL} diapositivas.`,
         type: "warning",
       });
       return;
@@ -168,6 +172,7 @@ export default function CarouselFormPage() {
   };
 
   const removeSlide = (index: number) => {
+    if (isArchived) return;
     if (form.config.slides.length <= 1) {
       Alert.fire({
         message: "El carrusel debe contener al menos una diapositiva.",
@@ -185,6 +190,7 @@ export default function CarouselFormPage() {
   };
 
   const moveSlide = (index: number, direction: "up" | "down") => {
+    if (isArchived) return;
     const newSlides = [...form.config.slides];
     const targetIndex = direction === "up" ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= newSlides.length) return;
@@ -193,31 +199,32 @@ export default function CarouselFormPage() {
     newSlides[index] = newSlides[targetIndex];
     newSlides[targetIndex] = temp;
 
-    setForm((prev) => ({
-      ...prev,
-      config: {
-        ...prev.config,
-        slides: newSlides,
-      },
-    }));
+    handleConfigChange("slides", newSlides);
   };
 
   const updateSlideField = (index: number, field: string, value: any) => {
-    setForm((prev) => {
-      const updated = [...prev.config.slides];
-      updated[index] = { ...updated[index], [field]: value };
-      return {
-        ...prev,
-        config: {
-          ...prev.config,
-          slides: updated,
-        },
-      };
-    });
+    if (isArchived) return;
+    const updated = [...form.config.slides];
+    updated[index] = { ...updated[index], [field]: value };
+    handleConfigChange("slides", updated);
   };
+
+  const updateSlideBulk = (index: number, updates: Record<string, any>) => {
+    if (isArchived) return;
+    const updated = [...form.config.slides];
+    updated[index] = { ...updated[index], ...updates };
+    handleConfigChange("slides", updated);
+  };
+
+  const isBrandSlot = form.slotKey === "brand_carousel";
+  const isSocialProof = form.slotKey === "social_proof";
+  const isHero = form.slotKey === "hero";
+  const isFeaturedProducts = form.slotKey === "featured_products";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isArchived) return;
 
     if (!form.name.trim()) {
       Alert.fire({
@@ -227,21 +234,15 @@ export default function CarouselFormPage() {
       return;
     }
 
-    if (form.config.slides.length > MAX_SLIDES_PER_CAROUSEL) {
-      Alert.fire({
-        message: `No podés exceder las ${MAX_SLIDES_PER_CAROUSEL} diapositivas.`,
-        type: "warning",
-      });
-      return;
-    }
-
-    const hasValidSlide = form.config.slides.some((s) => Boolean(s.imageUrl));
-    if (!hasValidSlide) {
-      Alert.fire({
-        message: "Cargá al menos una imagen en tus diapositivas.",
-        type: "warning",
-      });
-      return;
+    if (!isFeaturedProducts) {
+      const hasValidSlide = form.config.slides.some((s) => Boolean(s.imageUrl));
+      if (!hasValidSlide) {
+        Alert.fire({
+          message: "Cargá al menos una imagen en tus diapositivas.",
+          type: "warning",
+        });
+        return;
+      }
     }
 
     setSaving(true);
@@ -252,87 +253,76 @@ export default function CarouselFormPage() {
         slotKey: form.slotKey,
         status: form.status,
         campaignId: form.campaignId ? Number(form.campaignId) : null,
+        startsAt: form.startAt ? new Date(form.startAt).toISOString() : null,
+        endsAt: form.endAt ? new Date(form.endAt).toISOString() : null,
+        linkType: !form.config.customPerSlide ? form.linkType : "none",
+        categoryId:
+          form.linkType === "category" && form.categoryId
+            ? Number(form.categoryId)
+            : null,
+        productId:
+          form.linkType === "product" && form.productId
+            ? Number(form.productId)
+            : null,
+        externalUrl:
+          !form.config.customPerSlide && form.linkType === "external"
+            ? form.externalUrl.trim()
+            : null,
         config: {
           autoplay: Boolean(form.config.autoplay),
           interval: Number(form.config.interval) || 5,
-          customPerSlide: Boolean(form.config.customPerSlide),
-          // Props de título/CTA general
-          overlayTitle: !form.config.customPerSlide
-            ? form.config.overlayTitle.trim() || null
-            : null,
-          overlaySubtitle: !form.config.customPerSlide
-            ? form.config.overlaySubtitle.trim() || null
-            : null,
-          overlayButtonText: !form.config.customPerSlide
-            ? form.config.overlayButtonText.trim() || null
-            : null,
-          overlayLinkType: !form.config.customPerSlide
-            ? form.config.overlayLinkType
-            : "none",
-          overlayCategoryId:
-            !form.config.customPerSlide &&
-            form.config.overlayLinkType === "category" &&
-            form.config.overlayCategoryId
-              ? Number(form.config.overlayCategoryId)
-              : null,
-          overlayExternalUrl:
-            !form.config.customPerSlide &&
-            form.config.overlayLinkType === "external"
-              ? form.config.overlayExternalUrl.trim()
-              : null,
-          slides: form.config.slides.map((s) => ({
-            id: s.id,
-            imageUrl: s.imageUrl || null,
-            // Si es personalizado se guardan sus props individuales, sino se mantienen limpios
-            title:
-              form.config.customPerSlide || form.slotKey === "brand_carousel"
-                ? s.title
-                  ? s.title.trim()
-                  : null
-                : null,
-            subtitle:
-              form.config.customPerSlide && form.slotKey !== "brand_carousel"
-                ? s.subtitle
-                  ? s.subtitle.trim()
-                  : null
-                : null,
-            buttonText:
-              form.config.customPerSlide && form.slotKey === "hero"
-                ? s.buttonText
-                  ? s.buttonText.trim()
-                  : null
-                : null,
-            linkType: form.config.customPerSlide
-              ? s.linkType || "none"
-              : form.slotKey === "brand_carousel"
-                ? s.linkType || "none"
-                : "none",
-            categoryId:
-              (form.config.customPerSlide ||
-                form.slotKey === "brand_carousel") &&
-              s.linkType === "category" &&
-              s.categoryId
-                ? Number(s.categoryId)
-                : null,
-            externalUrl:
-              (form.config.customPerSlide ||
-                form.slotKey === "brand_carousel") &&
-              s.linkType === "external"
-                ? (s.externalUrl || "").trim()
-                : null,
-          })),
+          ...(isFeaturedProducts
+            ? {
+                mode: form.config.mode || "auto",
+                tagName: form.config.tagName || "",
+                selectedProducts: form.config.selectedProducts || [],
+                productIds: (form.config.selectedProducts || []).map(
+                  (p: any) => (typeof p === "object" ? p.id : p),
+                ),
+                limit:
+                  form.config.mode === "manual"
+                    ? (form.config.selectedProducts || []).length
+                    : Number(form.config.limit) || 8,
+              }
+            : {
+                customPerSlide: Boolean(form.config.customPerSlide),
+                overlayTitle: !form.config.customPerSlide
+                  ? form.config.overlayTitle.trim() || null
+                  : null,
+                overlaySubtitle: !form.config.customPerSlide
+                  ? form.config.overlaySubtitle.trim() || null
+                  : null,
+                overlayButtonText: !form.config.customPerSlide
+                  ? form.config.overlayButtonText.trim() || null
+                  : null,
+                slides: form.config.slides.map((s) => ({
+                  id: s.id,
+                  imageUrl: s.imageUrl || null,
+                  title: s.title?.trim() || null,
+                  subtitle: s.subtitle?.trim() || null,
+                  buttonText: s.buttonText?.trim() || null,
+                  linkType: s.linkType || "none",
+                  categoryId: s.categoryId ? Number(s.categoryId) : null,
+                  categoryName: s.categoryName || null,
+                  categorySlug: s.categorySlug || null,
+                  productId: s.productId ? Number(s.productId) : null,
+                  productName: s.productName || null,
+                  productSlug: s.productSlug || null,
+                  externalUrl: s.externalUrl?.trim() || null,
+                })),
+              }),
         },
       };
 
       if (isEditing) {
-        await updateItem(id, payload);
+        await siteContentService.update(id, payload);
         Alert.fire({
           message: SITE_CONTENT_MESSAGES.UPDATE_SUCCESS,
           type: "success",
           duration: 1500,
         });
       } else {
-        await createItem(payload);
+        await siteContentService.create(payload);
         Alert.fire({
           message: SITE_CONTENT_MESSAGES.CREATE_SUCCESS,
           type: "success",
@@ -342,6 +332,7 @@ export default function CarouselFormPage() {
 
       router.push("/dashboard/content/carousels");
     } catch (err: any) {
+      console.error("Error al guardar carrusel:", err);
       const msg =
         err.response?.data?.error ||
         err.response?.data?.message ||
@@ -351,10 +342,6 @@ export default function CarouselFormPage() {
       setSaving(false);
     }
   };
-
-  const isBrandSlot = form.slotKey === "brand_carousel";
-  const isSocialProof = form.slotKey === "social_proof";
-  const isHero = form.slotKey === "hero";
 
   if (loading) {
     return (
@@ -366,7 +353,7 @@ export default function CarouselFormPage() {
 
   return (
     <form onSubmit={handleSubmit} className="max-w-5xl mx-auto space-y-6 mb-36">
-      {/* Barra superior de navegación */}
+      {/* Top Bar */}
       <div className="flex items-center justify-between gap-4">
         <button
           type="button"
@@ -383,81 +370,102 @@ export default function CarouselFormPage() {
             onClick={handleBack}
             disabled={saving}
           >
-            Cancelar
+            {isArchived ? "Volver" : "Cancelar"}
           </Button>
-          <Button type="submit" disabled={saving}>
-            {saving
-              ? "Guardando..."
-              : isEditing
-                ? "Guardar cambios"
-                : "Crear carrusel"}
-          </Button>
+          {!isArchived && (
+            <Button type="submit" disabled={saving}>
+              {saving
+                ? "Guardando..."
+                : isEditing
+                  ? "Guardar cambios"
+                  : "Crear carrusel"}
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Bloque: Configuración Principal del Carrusel */}
+      {/* Bloque: Configuración Principal */}
       <div className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-2xl p-6 space-y-6 shadow-xs">
-        <div>
-          <h2 className="text-xl font-bold text-[var(--color-text-primary)]">
-            {isEditing ? "Editar Carrusel" : "Nuevo Carrusel"}
-          </h2>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">
-            Configuración general, tipo de ranura y comportamiento de rotación.
-          </p>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-[var(--color-text-primary)]">
+              {isEditing ? "Editar Carrusel" : "Nuevo Carrusel"}
+            </h2>
+            <p className="text-sm text-[var(--color-text-muted)] mt-1">
+              Configuración general, tipo de ranura y comportamiento de
+              rotación.
+            </p>
+          </div>
+
+          {isArchived && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-zinc-500/10 text-zinc-500 border border-zinc-500/30">
+              <Lock className="w-3.5 h-3.5" />
+              Carrusel Archivado (Solo lectura)
+            </span>
+          )}
         </div>
 
-        <Input
-          label="Nombre interno del carrusel"
-          value={form.name}
-          onChange={(e) => handleFieldChange("name", e.target.value)}
-          placeholder={
-            isBrandSlot
-              ? "Ej: Marcas Aliadas y Proveedores..."
-              : "Ej: Hero Principal Primavera 2026..."
-          }
-          required
-          autoFocus
-        />
+        {/* Nombre y Estado inicial */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="sm:col-span-2">
+            <Input
+              label="Nombre interno del carrusel"
+              value={form.name}
+              onChange={(e) => handleFieldChange("name", e.target.value)}
+              placeholder={
+                isBrandSlot
+                  ? "Ej: Marcas Aliadas y Proveedores..."
+                  : "Ej: Hero Principal Primavera 2026..."
+              }
+              disabled={isArchived}
+              required
+              autoFocus
+            />
+          </div>
+          <div>
+            <DropdownSelect
+              label="Estado inicial"
+              value={form.status}
+              onChange={(val) => handleFieldChange("status", val)}
+              disabled={isArchived}
+              options={[
+                { value: "draft", label: "Borrador" },
+                { value: "active", label: "Activo" },
+              ]}
+            />
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <DropdownSelect
-              label="Ranura / Tipo de Carrusel"
-              value={form.slotKey}
-              onChange={(val) => handleFieldChange("slotKey", val)}
-              options={CAROUSEL_SLOTS.map((s) => ({
-                value: s.key,
-                label: s.label,
-              }))}
-              disabled={isEditing}
-              placeholder="Seleccionar ranura..."
-            />
-          </div>
-
-          <div>
-            <DropdownSelect
-              label="Campaña asociada (opcional)"
-              value={form.campaignId || ""}
-              onChange={(val) => handleFieldChange("campaignId", val)}
-              options={[
-                { value: "", label: "Ninguna (Permanente / Manual)" },
-                ...campaigns.map((c) => ({
-                  value: String(c.id),
-                  label: c.name,
-                })),
-              ]}
-              placeholder="Seleccionar campaña..."
-            />
-          </div>
+          <DropdownSelect
+            label="Ranura / Tipo de Carrusel"
+            value={form.slotKey}
+            onChange={(val) => handleFieldChange("slotKey", val)}
+            options={slotOptions}
+            disabled={isEditing || isArchived}
+            placeholder="Seleccionar ranura..."
+          />
+          <div className="hidden sm:block" />
         </div>
 
-        {/* Opciones de Rotación */}
+        {/* Campaña y Rango de Fechas */}
+        <CampaignScheduleFields
+          campaignId={form.campaignId}
+          startAt={form.startAt}
+          endAt={form.endAt}
+          campaigns={campaigns}
+          disabled={isArchived}
+          onChange={(updates) => setForm((prev) => ({ ...prev, ...updates }))}
+        />
+
+        {/* Rotación Autoplay */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-[var(--color-bg-elevated)]/40 border border-[var(--color-border)]">
           <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={form.config.autoplay}
               onChange={(e) => handleConfigChange("autoplay", e.target.checked)}
+              disabled={isArchived}
               className="w-4 h-4 rounded border-[var(--color-border)] text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
             />
             <span className="text-sm font-medium text-[var(--color-text-primary)]">
@@ -478,20 +486,20 @@ export default function CarouselFormPage() {
                 onChange={(e) =>
                   handleConfigChange("interval", Number(e.target.value))
                 }
+                disabled={isArchived}
                 className="w-20 px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)]"
               />
             </div>
           )}
         </div>
 
-        {/* Título y Contenido General (Solo si no es Marcas y está en modo General) */}
-        {!isBrandSlot && !form.config.customPerSlide && (
+        {/* Contenido General Superpuesto */}
+        {!isBrandSlot && !isFeaturedProducts && !form.config.customPerSlide && (
           <div className="p-4 bg-[var(--color-bg-elevated)]/30 rounded-xl space-y-4 border border-[var(--color-border)]">
             <div className="flex items-center gap-2">
               <Settings2 className="w-4 h-4 text-[var(--color-primary)]" />
               <p className="text-xs font-semibold text-[var(--color-text-primary)] uppercase tracking-wider">
-                Contenido General Superpuesto (Permanece fijo mientras rotan las
-                fotos)
+                Contenido General Superpuesto (Fijo mientras rotan las fotos)
               </p>
             </div>
 
@@ -502,6 +510,7 @@ export default function CarouselFormPage() {
                 handleConfigChange("overlayTitle", e.target.value)
               }
               placeholder="Ej: Pastelería Artesanal de Autor"
+              disabled={isArchived}
             />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -512,6 +521,7 @@ export default function CarouselFormPage() {
                   handleConfigChange("overlaySubtitle", e.target.value)
                 }
                 placeholder="Elaborado cada mañana con ingredientes seleccionados"
+                disabled={isArchived}
               />
               <Input
                 label="Texto del botón (CTA)"
@@ -520,70 +530,23 @@ export default function CarouselFormPage() {
                   handleConfigChange("overlayButtonText", e.target.value)
                 }
                 placeholder="Ej: Ver catálogo completo"
+                disabled={isArchived}
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-              <div>
-                <DropdownSelect
-                  label="Destino del botón general"
-                  value={form.config.overlayLinkType || "none"}
-                  onChange={(val) => handleConfigChange("overlayLinkType", val)}
-                  options={LINK_TYPES}
-                  placeholder="Seleccionar destino..."
-                />
-              </div>
-
-              {form.config.overlayLinkType === "category" && (
-                <ResourceSearchTrigger
-                  label="Categoría destino"
-                  scope="categories"
-                  selectedId={form.config.overlayCategoryId}
-                  selectedName={form.config.overlayCategoryName}
-                  onSelect={(cat) => {
-                    handleConfigChange("overlayCategoryId", cat.id);
-                    handleConfigChange("overlayCategoryName", cat.name);
-                  }}
-                  onClear={() => {
-                    handleConfigChange("overlayCategoryId", "");
-                    handleConfigChange("overlayCategoryName", "");
-                  }}
-                />
-              )}
-
-              {form.config.overlayLinkType === "product" && (
-                <ResourceSearchTrigger
-                  label="Producto destino"
-                  scope="products"
-                  selectedId={form.config.overlayProductId}
-                  selectedName={form.config.overlayProductName}
-                  onSelect={(prod) => {
-                    handleConfigChange("overlayProductId", prod.id);
-                    handleConfigChange("overlayProductName", prod.name);
-                  }}
-                  onClear={() => {
-                    handleConfigChange("overlayProductId", "");
-                    handleConfigChange("overlayProductName", "");
-                  }}
-                />
-              )}
-
-              {form.config.overlayLinkType === "external" && (
-                <Input
-                  label="URL Externa"
-                  value={form.config.overlayExternalUrl}
-                  onChange={(e) =>
-                    handleConfigChange("overlayExternalUrl", e.target.value)
-                  }
-                  placeholder="https://..."
-                />
-              )}
-            </div>
+            <LinkDestinationSelector
+              label="Destino del botón general"
+              values={form}
+              disabled={isArchived}
+              onChange={(updates) =>
+                setForm((prev) => ({ ...prev, ...updates }))
+              }
+            />
           </div>
         )}
 
-        {/* Checkbox abajo de todo en el bloque principal: Habilitar opciones por diapositiva */}
-        {!isBrandSlot && (
+        {/* Checkbox: Personalizar por Diapositiva */}
+        {!isBrandSlot && !isFeaturedProducts && (
           <div className="pt-2 border-t border-[var(--color-border)]">
             <label className="flex items-start gap-3 p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)]/20 hover:bg-[var(--color-bg-elevated)]/40 transition-colors cursor-pointer">
               <input
@@ -592,6 +555,7 @@ export default function CarouselFormPage() {
                 onChange={(e) =>
                   handleConfigChange("customPerSlide", e.target.checked)
                 }
+                disabled={isArchived}
                 className="w-4 h-4 mt-0.5 rounded border-[var(--color-border)] text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
               />
               <div>
@@ -601,7 +565,7 @@ export default function CarouselFormPage() {
                 </p>
                 <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
                   Si está desactivado, el carrusel mantendrá el título y botón
-                  general fijos mientras las fotos se suceden de fondo.
+                  general fijos de fondo.
                 </p>
               </div>
             </label>
@@ -609,282 +573,64 @@ export default function CarouselFormPage() {
         )}
       </div>
 
-      {/* Bloque: Gestor de Diapositivas (Tope de 6) */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Layers className="w-5 h-5 text-[var(--color-primary)]" />
-            <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
-              Diapositivas ({form.config.slides.length} de{" "}
-              {MAX_SLIDES_PER_CAROUSEL})
-            </h3>
+      {/* Bloque: Vitrina de Productos Destacados O Diapositivas */}
+      {isFeaturedProducts ? (
+        <FeaturedProductsConfig
+          config={form.config}
+          disabled={isArchived}
+          onChange={handleConfigChange}
+          onBulkChange={handleConfigBulkChange}
+        />
+      ) : (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Layers className="w-5 h-5 text-[var(--color-primary)]" />
+              <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
+                Diapositivas ({form.config.slides.length} de{" "}
+                {MAX_SLIDES_PER_CAROUSEL})
+              </h3>
+            </div>
+
+            {!isArchived &&
+              (form.config.slides.length < MAX_SLIDES_PER_CAROUSEL ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={addSlide}
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Agregar diapositiva
+                </Button>
+              ) : (
+                <span className="text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/20">
+                  Límite alcanzado ({MAX_SLIDES_PER_CAROUSEL} máx)
+                </span>
+              ))}
           </div>
 
-          {form.config.slides.length < MAX_SLIDES_PER_CAROUSEL ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={addSlide}
-            >
-              <Plus className="w-3.5 h-3.5 mr-1" />
-              Agregar diapositiva
-            </Button>
-          ) : (
-            <span className="text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/20">
-              Límite alcanzado ({MAX_SLIDES_PER_CAROUSEL} máx)
-            </span>
-          )}
+          <div className="space-y-4">
+            {form.config.slides.map((slide, index) => (
+              <SlideEditor
+                key={slide.id || index}
+                slide={slide}
+                index={index}
+                totalSlides={form.config.slides.length}
+                isBrandSlot={isBrandSlot}
+                isSocialProof={isSocialProof}
+                isHero={isHero}
+                customPerSlide={form.config.customPerSlide}
+                disabled={isArchived}
+                onMove={moveSlide}
+                onRemove={removeSlide}
+                onUpdate={updateSlideField}
+                onBulkUpdate={updateSlideBulk}
+              />
+            ))}
+          </div>
         </div>
-
-        <div className="space-y-4">
-          {form.config.slides.map((slide, index) => (
-            <div
-              key={slide.id || index}
-              className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-2xl p-5 space-y-4 shadow-xs"
-            >
-              {/* Barra superior de la tarjeta de diapositiva */}
-              <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-[var(--color-bg-elevated)] text-[var(--color-text-primary)] text-xs font-bold flex items-center justify-center">
-                    {index + 1}
-                  </span>
-                  <span className="text-sm font-medium text-[var(--color-text-secondary)]">
-                    {isBrandSlot
-                      ? slide.title
-                        ? `Marca: ${slide.title}`
-                        : "Logo de Marca"
-                      : slide.title
-                        ? `Diapositiva: "${slide.title}"`
-                        : "Foto de Diapositiva"}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => moveSlide(index, "up")}
-                    disabled={index === 0}
-                    className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)] disabled:opacity-30 cursor-pointer"
-                    title="Subir orden"
-                  >
-                    <ChevronUp className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveSlide(index, "down")}
-                    disabled={index === form.config.slides.length - 1}
-                    className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)] disabled:opacity-30 cursor-pointer"
-                    title="Bajar orden"
-                  >
-                    <ChevronDown className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeSlide(index)}
-                    disabled={form.config.slides.length <= 1}
-                    className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 disabled:opacity-30 cursor-pointer"
-                    title="Eliminar diapositiva"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Contenido adaptado por slot */}
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
-                {/* Imagen/Logo */}
-                <div
-                  className={
-                    isBrandSlot || !form.config.customPerSlide
-                      ? "md:col-span-5"
-                      : "md:col-span-4"
-                  }
-                >
-                  <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
-                    {isBrandSlot
-                      ? "Logo de la marca (PNG o SVG recomendado)"
-                      : "Fotografía de la diapositiva"}
-                  </label>
-                  <ImageUpload
-                    images={slide.imageUrl ? [slide.imageUrl] : []}
-                    onChange={(imgs) =>
-                      updateSlideField(index, "imageUrl", imgs[0] || null)
-                    }
-                    max={1}
-                    folder="carousels"
-                  />
-                </div>
-
-                {/* Campos condicionales */}
-                <div
-                  className={
-                    isBrandSlot || !form.config.customPerSlide
-                      ? "md:col-span-7 space-y-3.5"
-                      : "md:col-span-8 space-y-3.5"
-                  }
-                >
-                  {/* CASO 1: Carrusel de Marcas (Solo nombre de marca + enlace externo opcional) */}
-                  {isBrandSlot && (
-                    <>
-                      <Input
-                        label="Nombre de la marca / Empresa"
-                        value={slide.title || ""}
-                        onChange={(e) =>
-                          updateSlideField(index, "title", e.target.value)
-                        }
-                        placeholder="Ej: Callebaut, KitchenAid..."
-                        required
-                      />
-                      <Input
-                        label="Sitio web o enlace (opcional)"
-                        value={slide.externalUrl || ""}
-                        onChange={(e) => {
-                          updateSlideField(
-                            index,
-                            "externalUrl",
-                            e.target.value,
-                          );
-                          updateSlideField(
-                            index,
-                            "linkType",
-                            e.target.value ? "external" : "none",
-                          );
-                        }}
-                        placeholder="https://..."
-                      />
-                    </>
-                  )}
-
-                  {/* CASO 2: Modo General activo (las diapositivas solo aportan la imagen) */}
-                  {!isBrandSlot && !form.config.customPerSlide && (
-                    <div className="p-4 rounded-xl bg-[var(--color-bg-surface)] border border-[var(--color-border)] text-xs text-[var(--color-text-muted)] space-y-1">
-                      <p className="font-medium text-[var(--color-text-secondary)]">
-                        Diapositiva en modo fondo general
-                      </p>
-                      <p>
-                        Esta imagen rotará manteniendo el título, subtítulo y
-                        botón de acción configurados arriba.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* CASO 3: Modo Personalizado por diapositiva */}
-                  {!isBrandSlot && form.config.customPerSlide && (
-                    <>
-                      <Input
-                        label="Título específico"
-                        value={slide.title || ""}
-                        onChange={(e) =>
-                          updateSlideField(index, "title", e.target.value)
-                        }
-                        placeholder="Ej: Especial Macarons Franceses"
-                      />
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <Input
-                          label={
-                            isSocialProof
-                              ? "Reseña o comentario"
-                              : "Subtítulo o bajada"
-                          }
-                          value={slide.subtitle || ""}
-                          onChange={(e) =>
-                            updateSlideField(index, "subtitle", e.target.value)
-                          }
-                          placeholder={
-                            isSocialProof
-                              ? "Amamos la torta de boda..."
-                              : "Edición limitada"
-                          }
-                        />
-                        {isHero && (
-                          <Input
-                            label="Texto del botón (CTA)"
-                            value={slide.buttonText || ""}
-                            onChange={(e) =>
-                              updateSlideField(
-                                index,
-                                "buttonText",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="Ej: Ver más"
-                          />
-                        )}
-                      </div>
-
-                      {/* ... Dentro del map de form.config.slides ... */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                        <div>
-                          <DropdownSelect
-                            label="Destino del clic"
-                            value={slide.linkType || "none"}
-                            onChange={(val) =>
-                              updateSlideField(index, "linkType", val)
-                            }
-                            options={LINK_TYPES}
-                            placeholder="Seleccionar destino..."
-                          />
-                        </div>
-
-                        {slide.linkType === "category" && (
-                          <ResourceSearchTrigger
-                            label="Categoría destino"
-                            scope="categories"
-                            selectedId={slide.categoryId}
-                            selectedName={slide.categoryName}
-                            onSelect={(cat) => {
-                              updateSlideField(index, "categoryId", cat.id);
-                              updateSlideField(index, "categoryName", cat.name);
-                            }}
-                            onClear={() => {
-                              updateSlideField(index, "categoryId", "");
-                              updateSlideField(index, "categoryName", "");
-                            }}
-                          />
-                        )}
-
-                        {slide.linkType === "product" && (
-                          <ResourceSearchTrigger
-                            label="Producto destino"
-                            scope="products"
-                            selectedId={slide.productId}
-                            selectedName={slide.productName}
-                            onSelect={(prod) => {
-                              updateSlideField(index, "productId", prod.id);
-                              updateSlideField(index, "productName", prod.name);
-                            }}
-                            onClear={() => {
-                              updateSlideField(index, "productId", "");
-                              updateSlideField(index, "productName", "");
-                            }}
-                          />
-                        )}
-
-                        {slide.linkType === "external" && (
-                          <Input
-                            label="URL Externa"
-                            value={slide.externalUrl || ""}
-                            onChange={(e) =>
-                              updateSlideField(
-                                index,
-                                "externalUrl",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="https://..."
-                          />
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
     </form>
   );
 }

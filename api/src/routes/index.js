@@ -1,5 +1,5 @@
 const authMiddleware = require("../middleware/auth");
-const storeStatusMiddleware = require("../middleware/storeStatus");
+const storeStatus = require("../middleware/storeStatus");
 const resolveTenant = require("../middleware/resolveTenant");
 const billingGuard = require("../middleware/billingGuard");
 const {
@@ -20,33 +20,36 @@ const mountRoutes = (app) => {
   app.use("/api/admin", resolveTenant, authMiddleware, billingGuard);
   app.use("/api/admin/dashboard", require("./admin/dashboard.routes"));
   app.use("/api/admin/products", require("./admin/products.routes"));
+  app.use("/api/admin/services", require("./admin/services.routes"));
   app.use("/api/admin/categories", require("./admin/categories.routes"));
-  app.use("/api/admin/orders", require("./admin/orders.routes"));
-  app.use("/api/admin/settings", require("./admin/settings.routes"));
+  app.use("/api/admin/attributes", require("./admin/attributes.routes"));
+  app.use("/api/admin/tags", require("./admin/tags.routes"));
   app.use("/api/admin/upload", require("./admin/upload.routes"));
   app.use(
     "/api/admin/change-requests",
     require("./admin/changeRequests.routes"),
   );
-  app.use("/api/admin/services", require("./admin/services.routes"));
-  app.use("/api/admin/attributes", require("./admin/attributes.routes"));
-  app.use("/api/admin/tags", require("./admin/tags.routes"));
+  app.use("/api/admin/search", require("./admin/search.routes"));
+  app.use("/api/admin/orders", require("./admin/orders.routes"));
+  app.use("/api/admin/settings", require("./admin/settings.routes"));
   app.use("/api/admin/discounts", require("./admin/discounts.routes"));
   app.use("/api/admin/branches", require("./admin/branches.routes"));
   app.use("/api/admin/payment", require("./admin/payment.routes"));
   app.use("/api/admin/campaigns", require("./admin/campaigns.routes"));
-  app.use("/api/admin/search", require("./admin/search.routes"));
   app.use("/api/admin/billing", require("./admin/billing.routes"));
+  app.use("/api/admin/site-contents", require("./admin/siteContent.routes"));
 
   // Internal (requiere APPRESUELVE_SECRET — tenant explícito en cada endpoint)
   app.use("/api/internal", require("./internal.routes"));
 
   // Store (pública — resuelve tenant por X-Tenant-Slug y chequea estado operativo)
-  app.use("/api/store", resolveTenant, storeStatusMiddleware);
+  app.use("/api/store", resolveTenant, storeStatus);
+
+  // NUEVOS ENDPOINTS ULTRA OPTIMIZADOS
+  app.use("/api/store/bootstrap", require("./store/bootstrap.routes"));
+  app.use("/api/store/cart", require("./store/cart.routes"));
 
   app.use("/api/store/products", require("./store/products.routes"));
-  app.use("/api/store/categories", require("./store/categories.routes"));
-  app.use("/api/store/settings", require("./store/settings.routes")); // Pasa libre por la excepción
   app.use("/api/store/orders", require("./store/orders.routes"));
   app.use("/api/store/services", require("./store/services.routes"));
   app.use("/api/store/tags", require("./store/tags.routes"));

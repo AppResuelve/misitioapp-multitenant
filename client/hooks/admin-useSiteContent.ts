@@ -94,12 +94,27 @@ export function useSiteContent(options: UseSiteContentOptions = {}) {
 
     setItems((prev) =>
       prev.map((item) => {
+        // 1. Si es el elemento conmutado, actualizarlo con la data del backend
         if (item.id === Number(id)) {
-          return updated;
+          return {
+            ...item,
+            ...updated,
+          };
         }
+
+        // 2. Si el que conmutó pasó a active, desplazar ÚNICAMENTE a los de su mismo ámbito
         if (updated.status === "active" && item.slotKey === updated.slotKey) {
-          return { ...item, status: "draft" };
+          const itemCampId = item.campaignId ? Number(item.campaignId) : null;
+          const updatedCampId = updated.campaignId
+            ? Number(updated.campaignId)
+            : null;
+
+          // Solo se apaga si comparten exactamente el mismo ámbito (ambos null o ambos de la misma campaña)
+          if (itemCampId === updatedCampId) {
+            return { ...item, status: "draft" };
+          }
         }
+
         return item;
       }),
     );

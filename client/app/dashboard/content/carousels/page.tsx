@@ -11,6 +11,7 @@ import {
   Images as CarouselIcon,
   CheckCircle2,
   Layers,
+  Lock,
 } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
 import { useSiteContent } from "@/hooks/admin-useSiteContent";
@@ -33,6 +34,14 @@ export default function CarouselsPage() {
   const [togglingId, setTogglingId] = useState<number | null>(null);
 
   const handleToggleStatus = async (carousel) => {
+    if (carousel.status === "archived") {
+      Alert.fire({
+        message: "Los contenidos archivados no pueden conmutarse directamente.",
+        type: "warning",
+      });
+      return;
+    }
+
     setTogglingId(carousel.id);
     try {
       await toggleItemStatus(carousel.id);
@@ -73,6 +82,41 @@ export default function CarouselsPage() {
     }
   };
 
+  // Determina si este carrusel es el que efectivamente está mostrándose en el Storefront
+  const isCarouselLive = (carousel, allSlotCarousels) => {
+    if (carousel.status !== "active") return false;
+    const now = new Date();
+
+    // Caso A: Asociado a campaña
+    if (carousel.campaignId && carousel.campaign) {
+      const camp = carousel.campaign;
+      if (camp.status !== "active") return false;
+      const start = new Date(camp.startsAt);
+      const end = new Date(camp.endsAt);
+      return now >= start && now <= end;
+    }
+
+    // Caso B: Es base (sin campaña).
+    // Solo está en vivo si no hay ningún carrusel de campaña activo y corriendo ahora en este slot
+    const hasRunningCampaignCarousel = allSlotCarousels.some((c) => {
+      if (c.id === carousel.id || !c.campaignId || !c.campaign) return false;
+      if (c.status !== "active" || c.campaign.status !== "active") return false;
+      const s = new Date(c.campaign.startsAt);
+      const e = new Date(c.campaign.endsAt);
+      return now >= s && now <= e;
+    });
+
+    if (hasRunningCampaignCarousel) return false;
+
+    // Verificar fechas propias si tuviese
+    const start = carousel.startsAt ? new Date(carousel.startsAt) : null;
+    const end = carousel.endsAt ? new Date(carousel.endsAt) : null;
+    if (start && now < start) return false;
+    if (end && now > end) return false;
+
+    return true;
+  };
+
   const populatedSlots = CAROUSEL_SLOTS.filter((slot) =>
     carousels.some((c) => c.slotKey === slot.key),
   );
@@ -87,7 +131,7 @@ export default function CarouselsPage() {
           </h1>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
             Gestioná secuencias de diapositivas y galerías dinámicas. Máximo{" "}
-            {MAX_ITEMS_PER_SLOT} por espacio (1 visible a la vez).
+            {MAX_ITEMS_PER_SLOT} activos/borradores por espacio.
           </p>
         </div>
         <Link href="/dashboard/content/carousels/new">
@@ -128,7 +172,11 @@ export default function CarouselsPage() {
               const slotCarousels = carousels.filter(
                 (c) => c.slotKey === slot.key,
               );
-              const isSlotFull = slotCarousels.length >= MAX_ITEMS_PER_SLOT;
+              // Solo activos y borradores cuentan para el límite
+              const activeCount = slotCarousels.filter(
+                (c) => c.status !== "archived",
+              ).length;
+              const isSlotFull = activeCount >= MAX_ITEMS_PER_SLOT;
 
               return (
                 <div
@@ -149,30 +197,25 @@ export default function CarouselsPage() {
                               : "bg-[var(--color-bg-elevated)] text-[var(--color-text-secondary)]"
                           }`}
                         >
-                          {slotCarousels.length}/{MAX_ITEMS_PER_SLOT}
+                          {activeCount}/{MAX_ITEMS_PER_SLOT}
                         </span>
                       </div>
                       <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                        {slot.description} • Sugerido: {slot.recommendedSize}
+                        {slot.description} • Sugerido:{" "}
+                        <span className="font-medium text-[var(--color-text-secondary)]">
+                          {slot.recommendedSize}
+                        </span>
                       </p>
                     </div>
-
-                    {!isSlotFull && (
-                      <Link
-                        href={`/dashboard/content/carousels/new?slotKey=${slot.key}`}
-                      >
-                        <Button size="sm" variant="secondary">
-                          <Plus className="w-3.5 h-3.5 mr-1" />
-                          Agregar
-                        </Button>
-                      </Link>
-                    )}
                   </div>
 
                   {/* Tarjetas de Carruseles */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {slotCarousels.map((carousel) => {
                       const isActive = carousel.status === "active";
+                      const isArchived = carousel.status === "archived";
+                      const isLive = isCarouselLive(carousel, slotCarousels);
+
                       const slides = carousel.config?.slides || [];
                       const firstSlideImage = slides[0]?.imageUrl || null;
 
@@ -180,9 +223,11 @@ export default function CarouselsPage() {
                         <div
                           key={carousel.id}
                           className={`flex flex-col justify-between p-4 rounded-xl border transition-all ${
-                            isActive
-                              ? "bg-[var(--color-bg-card)] border-emerald-500/40 shadow-xs ring-1 ring-emerald-500/20"
-                              : "bg-[var(--color-bg-card)] border-[var(--color-border)] hover:border-[var(--color-border-hover)]"
+                            isLive
+                              ? "bg-[var(--color-bg-card)] border-emerald-500/50 shadow-xs ring-1 ring-emerald-500/30"
+                              : isArchived
+                                ? "bg-[var(--color-bg-card)]/60 border-[var(--color-border)] opacity-60"
+                                : "bg-[var(--color-bg-card)] border-[var(--color-border)] hover:border-[var(--color-border-hover)]"
                           }`}
                         >
                           <div className="space-y-3">
@@ -197,23 +242,27 @@ export default function CarouselsPage() {
                                 <div className="text-center p-3 text-[var(--color-text-muted)]">
                                   <CarouselIcon className="w-6 h-6 mx-auto mb-1 opacity-50" />
                                   <span className="text-[11px]">
-                                    Sin diapositivas
+                                    {carousel.slotKey === "featured_products"
+                                      ? "Vitrina dinámica de productos"
+                                      : "Sin diapositivas"}
                                   </span>
                                 </div>
                               )}
 
-                              {isActive && (
-                                <span className="absolute top-2 right-2 bg-emerald-500 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full shadow-xs flex items-center gap-1">
+                              {isLive && (
+                                <span className="absolute top-2 right-2 bg-emerald-600 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full shadow-xs flex items-center gap-1">
                                   <CheckCircle2 className="w-3 h-3" />
-                                  Visible
+                                  En vivo ahora
                                 </span>
                               )}
 
-                              <span className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-xs text-white text-[10px] font-medium px-2 py-0.5 rounded-md flex items-center gap-1">
-                                <Layers className="w-3 h-3" />
-                                {slides.length} diapositiva
-                                {slides.length === 1 ? "" : "s"}
-                              </span>
+                              {carousel.slotKey !== "featured_products" && (
+                                <span className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-xs text-white text-[10px] font-medium px-2 py-0.5 rounded-md flex items-center gap-1">
+                                  <Layers className="w-3 h-3" />
+                                  {slides.length} diapositiva
+                                  {slides.length === 1 ? "" : "s"}
+                                </span>
+                              )}
                             </div>
 
                             <div>
@@ -221,12 +270,15 @@ export default function CarouselsPage() {
                                 {carousel.name}
                               </p>
 
-                              <div className="flex items-center gap-2 mt-2 flex-wrap">
-                                {carousel.campaign && (
+                              {/* Badges de Campaña / Evergreen y Ajustes */}
+                              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                {carousel.campaign ? (
                                   <span
                                     className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md font-medium"
                                     style={{
-                                      backgroundColor: `${carousel.campaign.color || "#6366f1"}15`,
+                                      backgroundColor: `${
+                                        carousel.campaign.color || "#6366f1"
+                                      }15`,
                                       color:
                                         carousel.campaign.color || "#6366f1",
                                     }}
@@ -234,46 +286,89 @@ export default function CarouselsPage() {
                                     <Calendar className="w-3 h-3" />
                                     {carousel.campaign.name}
                                   </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md font-medium bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20">
+                                    <Layers className="w-3 h-3" />
+                                    Carrusel Base (Evergreen)
+                                  </span>
                                 )}
 
-                                <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-[var(--color-bg-elevated)] text-[var(--color-text-secondary)]">
-                                  Autoplay:{" "}
-                                  {carousel.config?.autoplay !== false
-                                    ? `${carousel.config?.interval || 5}s`
-                                    : "Manual"}
-                                </span>
+                                {carousel.slotKey !== "featured_products" && (
+                                  <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-[var(--color-bg-elevated)] text-[var(--color-text-secondary)]">
+                                    Autoplay:{" "}
+                                    {carousel.config?.autoplay !== false
+                                      ? `${carousel.config?.interval || 5}s`
+                                      : "Manual"}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
 
+                          {/* Toggle Activo y Acciones */}
                           <div className="flex items-center justify-between pt-3 mt-4 border-t border-[var(--color-border)]">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleStatus(carousel)}
-                              disabled={togglingId === carousel.id}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors cursor-pointer disabled:opacity-50 ${
-                                isActive
-                                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
-                                  : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/20"
-                              }`}
-                            >
-                              {togglingId === carousel.id ? (
-                                <Spinner size="sm" />
-                              ) : (
-                                <span
-                                  className={`w-1.5 h-1.5 rounded-full ${
-                                    isActive ? "bg-emerald-500" : "bg-amber-500"
-                                  }`}
-                                />
-                              )}
-                              {isActive ? "Activo" : "Borrador"}
-                            </button>
+                            {isArchived ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-500/10 text-zinc-500 border border-zinc-500/30">
+                                <Lock className="w-3 h-3" />
+                                Archivado
+                              </span>
+                            ) : (
+                              (() => {
+                                // 🔒 Verificamos si la campaña padre está en borrador
+                                const isCampaignDraft =
+                                  carousel.campaign &&
+                                  carousel.campaign.status === "draft";
+                                const isDisabled =
+                                  togglingId === carousel.id || isCampaignDraft;
+
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleStatus(carousel)}
+                                    disabled={isDisabled}
+                                    title={
+                                      isCampaignDraft
+                                        ? `La campaña "${carousel.campaign.name}" está en borrador. Activá la campaña para poder activar este carrusel.`
+                                        : undefined
+                                    }
+                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                                      isCampaignDraft
+                                        ? "opacity-40 cursor-not-allowed bg-zinc-500/10 text-zinc-500 border-zinc-500/20"
+                                        : isActive
+                                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 cursor-pointer disabled:opacity-50"
+                                          : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/20 cursor-pointer disabled:opacity-50"
+                                    }`}
+                                  >
+                                    {togglingId === carousel.id ? (
+                                      <Spinner size="sm" />
+                                    ) : (
+                                      <span
+                                        className={`w-1.5 h-1.5 rounded-full ${
+                                          isActive
+                                            ? "bg-emerald-500"
+                                            : "bg-amber-500"
+                                        }`}
+                                      />
+                                    )}
+                                    {isActive ? "Activo" : "Borrador"}
+                                  </button>
+                                );
+                              })()
+                            )}
 
                             <div className="flex items-center gap-1">
                               <Link
                                 href={`/dashboard/content/carousels/${carousel.id}`}
-                                className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-primary-text)] hover:bg-[var(--color-bg-elevated)] transition-colors"
-                                title="Editar carrusel"
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  isArchived
+                                    ? "text-[var(--color-text-muted)] opacity-30 pointer-events-none"
+                                    : "text-[var(--color-text-muted)] hover:text-[var(--color-primary-text)] hover:bg-[var(--color-bg-elevated)]"
+                                }`}
+                                title={
+                                  isArchived
+                                    ? "Archivado (solo lectura)"
+                                    : "Editar carrusel"
+                                }
                               >
                                 <Edit className="w-4 h-4" />
                               </Link>

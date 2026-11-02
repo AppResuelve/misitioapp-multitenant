@@ -1,22 +1,22 @@
 // @ts-nocheck
 "use client";
 
-import { useState } from "react";
-import { Plus, Edit, Trash2, Calendar, Tag, Megaphone } from "lucide-react";
+import { useState, useMemo } from "react";
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Calendar,
+  Tag,
+  Megaphone,
+  Lock,
+} from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
 import { useUnsavedChanges } from "@/context/UnsavedChangesContext";
 import { useCampaigns, Campaign } from "@/hooks/admin-useCampaigns";
-import { Button, Input, Modal, Spinner } from "@/components/ui";
-import { slugify } from "@/utils/slugify";
+import { Button, Spinner } from "@/components/ui";
 import { CAMPAIGN_MESSAGES } from "@/constants/campaigns";
-import { COLOR_PALETTE } from "@/constants/colors";
-
-const formatDateInput = (dateStr?: string | null) => {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return "";
-  return d.toISOString().slice(0, 16);
-};
+import { CampaignModal } from "@/components/admin/campaigns/CampaignModal";
 
 const formatDateDisplay = (dateStr: string) => {
   const d = new Date(dateStr);
@@ -28,6 +28,18 @@ const formatDateDisplay = (dateStr: string) => {
     hour: "2-digit",
     minute: "2-digit",
   }).format(d);
+};
+
+// Prioridad operativa real: En curso primero, luego próximas, luego borradores y finalmente archivadas/finalizadas
+const calculateSortWeight = (camp: Campaign): number => {
+  if (camp.status === "archived") return 4;
+  if (camp.status === "draft") return 3;
+  if (camp.status === "active") {
+    if (camp.timingStatus === "running") return 1;
+    if (camp.timingStatus === "upcoming") return 2;
+    return 4; // active pero ended
+  }
+  return 5;
 };
 
 export default function CampaignsPage() {
@@ -43,88 +55,61 @@ export default function CampaignsPage() {
   const { confirmLeave } = useUnsavedChanges();
   const Alert = useAlert();
 
+  const [activeTab, setActiveTab] = useState<
+    "all" | "active" | "draft" | "archived"
+  >("all");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Campaign | null>(null);
-
-  const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
-  const [description, setDescription] = useState("");
-  const [startsAt, setStartsAt] = useState("");
-  const [endsAt, setEndsAt] = useState("");
-  const [color, setColor] = useState(COLOR_PALETTE[0] || "#6366f1");
-  const [slugManual, setSlugManual] = useState(false);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<number | null>(null);
 
-  const resetForm = () => {
-    setName("");
-    setSlug("");
-    setDescription("");
-    setStartsAt("");
-    setEndsAt("");
-    setColor(COLOR_PALETTE[0] || "#6366f1");
-    setSlugManual(false);
-    setEditing(null);
-  };
+  // Filtrado y ordenamiento reactivo por vigencia operativa
+  const filteredCampaigns = useMemo(() => {
+    const list =
+      activeTab === "all"
+        ? [...campaigns]
+        : campaigns.filter((c) => c.status === activeTab);
+
+    return list.sort((a, b) => {
+      const weightA = calculateSortWeight(a);
+      const weightB = calculateSortWeight(b);
+      if (weightA !== weightB) return weightA - weightB;
+
+      // Desempate: la fecha de inicio más reciente primero
+      return new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime();
+    });
+  }, [campaigns, activeTab]);
+
+  const counts = useMemo(
+    () => ({
+      all: campaigns.length,
+      active: campaigns.filter((c) => c.status === "active").length,
+      draft: campaigns.filter((c) => c.status === "draft").length,
+      archived: campaigns.filter((c) => c.status === "archived").length,
+    }),
+    [campaigns],
+  );
 
   const openCreate = () => {
-    resetForm();
-    const now = new Date();
-    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-    setStartsAt(formatDateInput(now.toISOString()));
-    setEndsAt(formatDateInput(nextWeek.toISOString()));
+    setEditing(null);
     setModalOpen(true);
   };
 
   const openEdit = (campaign: Campaign) => {
+    if (campaign.status === "archived") return;
     setEditing(campaign);
-    setName(campaign.name);
-    setSlug(campaign.slug);
-    setDescription(campaign.description || "");
-    setStartsAt(formatDateInput(campaign.startsAt));
-    setEndsAt(formatDateInput(campaign.endsAt));
-    setColor(campaign.color || COLOR_PALETTE[0] || "#6366f1");
-    setSlugManual(true);
-
     setModalOpen(true);
   };
 
   const closeModal = async () => {
     if (await confirmLeave()) {
       setModalOpen(false);
-      resetForm();
+      setEditing(null);
     }
   };
 
-  const handleNameChange = (val: string) => {
-    setName(val);
-    if (!slugManual) {
-      setSlug(slugify(val));
-    }
-  };
-
-  const handleSlugChange = (val: string) => {
-    setSlug(val);
-    setSlugManual(true);
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!name.trim()) {
-      Alert.fire({ message: CAMPAIGN_MESSAGES.NAME_REQUIRED, type: "warning" });
-      return;
-    }
-
-    if (!startsAt || !endsAt) {
-      Alert.fire({
-        message: CAMPAIGN_MESSAGES.DATES_REQUIRED,
-        type: "warning",
-      });
-      return;
-    }
-
-    if (new Date(endsAt) <= new Date(startsAt)) {
+  const handleSave = async (payload: any) => {
+    if (new Date(payload.endsAt) <= new Date(payload.startsAt)) {
       Alert.fire({
         message: CAMPAIGN_MESSAGES.INVALID_DATE_RANGE,
         type: "warning",
@@ -134,15 +119,6 @@ export default function CampaignsPage() {
 
     setSaving(true);
     try {
-      const payload = {
-        name: name.trim(),
-        slug: slug.trim() || slugify(name),
-        description: description.trim() || null,
-        startsAt: new Date(startsAt).toISOString(),
-        endsAt: new Date(endsAt).toISOString(),
-        color,
-      };
-
       if (editing) {
         await updateCampaign(editing.id, payload);
         Alert.fire({
@@ -158,9 +134,8 @@ export default function CampaignsPage() {
           duration: 1500,
         });
       }
-
       setModalOpen(false);
-      resetForm();
+      setEditing(null);
     } catch (err: any) {
       const msg =
         err.response?.data?.error ||
@@ -173,12 +148,31 @@ export default function CampaignsPage() {
   };
 
   const handleToggleStatus = async (campaign: Campaign) => {
+    if (campaign.status === "archived") {
+      Alert.fire({
+        message:
+          "Las campañas archivadas no pueden ser reactivadas directamente.",
+        type: "warning",
+      });
+      return;
+    }
+
+    const now = new Date();
+    if (new Date(campaign.endsAt) <= now) {
+      Alert.fire({
+        message:
+          "Esta campaña ya superó su fecha de fin. Para activarla, edita sus fechas primero.",
+        type: "warning",
+      });
+      return;
+    }
+
     setTogglingId(campaign.id);
     try {
       await toggleCampaignStatus(campaign.id);
     } catch (err: any) {
       Alert.fire({
-        message: CAMPAIGN_MESSAGES.STATUS_ERROR,
+        message: err.response?.data?.error || CAMPAIGN_MESSAGES.STATUS_ERROR,
         type: "error",
       });
     } finally {
@@ -217,22 +211,22 @@ export default function CampaignsPage() {
     switch (timing) {
       case "running":
         return (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             En curso
           </span>
         );
       case "upcoming":
         return (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
             Programada
           </span>
         );
       case "ended":
       default:
         return (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium bg-zinc-500/10 text-zinc-500 dark:text-zinc-400 border border-zinc-500/20">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-500/10 text-zinc-500 dark:text-zinc-400 border border-zinc-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
             Finalizada
           </span>
@@ -242,14 +236,15 @@ export default function CampaignsPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
             Campañas y Eventos
           </h1>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
-            Definí las fechas de Hot Sale, Cyber Monday o fechas especiales para
-            sincronizar banners y descuentos.
+            Programá fechas especiales para sincronizar descuentos y banners
+            temáticos automáticamente.
           </p>
         </div>
         <Button onClick={openCreate}>
@@ -258,227 +253,230 @@ export default function CampaignsPage() {
         </Button>
       </div>
 
-      <div className="relative min-h-[220px]">
+      {/* Pestañas de estado */}
+      <div className="flex border-b border-[var(--color-border)] gap-6 text-sm font-medium">
+        <button
+          type="button"
+          onClick={() => setActiveTab("all")}
+          className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+            activeTab === "all"
+              ? "border-[var(--color-primary)] text-[var(--color-primary-text)] font-semibold"
+              : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+          }`}
+        >
+          Todas ({counts.all})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("active")}
+          className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+            activeTab === "active"
+              ? "border-[var(--color-primary)] text-[var(--color-primary-text)] font-semibold"
+              : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+          }`}
+        >
+          Activas ({counts.active})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("draft")}
+          className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+            activeTab === "draft"
+              ? "border-[var(--color-primary)] text-[var(--color-primary-text)] font-semibold"
+              : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+          }`}
+        >
+          Borradores ({counts.draft})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("archived")}
+          className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+            activeTab === "archived"
+              ? "border-[var(--color-primary)] text-[var(--color-primary-text)] font-semibold"
+              : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+          }`}
+        >
+          Archivadas ({counts.archived})
+        </button>
+      </div>
+
+      {/* Contenedor Principal: Tabla */}
+      <div className="relative min-h-[220px] bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl overflow-hidden shadow-xs">
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center z-10 bg-[var(--color-bg-base)]/60 backdrop-blur-xs">
             <Spinner size="lg" />
           </div>
         )}
 
-        <div className="space-y-3">
-          {campaigns.length === 0 && !loading ? (
-            <div className="text-center py-16 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg-surface)]/30">
-              <Megaphone className="w-8 h-8 text-[var(--color-text-muted)] mx-auto mb-2 opacity-60" />
-              <p className="font-medium text-[var(--color-text-primary)]">
-                No hay campañas configuradas
-              </p>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                Creá tu primera campaña para agrupar promociones y banners por
-                fecha.
-              </p>
-            </div>
-          ) : (
-            campaigns.map((camp) => (
-              <div
-                key={camp.id}
-                className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 bg-[var(--color-bg-card)] border border-[var(--color-border)] hover:border-[var(--color-border-hover)] rounded-xl transition-all shadow-xs"
-              >
-                <div className="flex items-start gap-3.5 min-w-0">
-                  <div
-                    className="w-3.5 h-3.5 rounded-full mt-1 shrink-0 ring-4 ring-[var(--color-bg-elevated)]"
-                    style={{ backgroundColor: camp.color || "#6366f1" }}
-                    title={`Color: ${camp.color}`}
-                  />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-base font-semibold text-[var(--color-text-primary)] truncate">
-                        {camp.name}
-                      </p>
-                      {renderTimingBadge(camp.timingStatus)}
-                    </div>
-
-                    <div className="flex items-center gap-4 text-xs text-[var(--color-text-muted)] mt-1.5 flex-wrap">
-                      <span className="flex items-center gap-1.5">
-                        <Tag className="w-3.5 h-3.5" />/{camp.slug}
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5" />
-                        {formatDateDisplay(camp.startsAt)} →{" "}
-                        {formatDateDisplay(camp.endsAt)}
-                      </span>
-                    </div>
-
-                    {camp.description && (
-                      <p className="text-xs text-[var(--color-text-secondary)] mt-2 line-clamp-1">
-                        {camp.description}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-[var(--color-border)]">
-                  <button
-                    type="button"
-                    onClick={() => handleToggleStatus(camp)}
-                    disabled={togglingId === camp.id}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors cursor-pointer disabled:opacity-50 w-[96px] justify-center shrink-0 ${
-                      camp.status === "active"
-                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
-                        : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/20"
-                    }`}
+        {filteredCampaigns.length === 0 && !loading ? (
+          <div className="text-center py-16 px-4">
+            <Megaphone className="w-8 h-8 text-[var(--color-text-muted)] mx-auto mb-2 opacity-60" />
+            <p className="font-medium text-[var(--color-text-primary)]">
+              No hay campañas en esta sección
+            </p>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+              Las campañas creadas aparecerán aquí según su estado.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-[var(--color-text-primary)]">
+              <thead className="bg-[var(--color-bg-surface)] border-b border-[var(--color-border)] text-xs text-[var(--color-text-muted)] uppercase tracking-wider">
+                <tr>
+                  <th scope="col" className="px-6 py-3.5 font-semibold">
+                    Campaña
+                  </th>
+                  <th scope="col" className="px-6 py-3.5 font-semibold">
+                    Vigencia
+                  </th>
+                  <th scope="col" className="px-6 py-3.5 font-semibold">
+                    Tiempo
+                  </th>
+                  <th scope="col" className="px-6 py-3.5 font-semibold">
+                    Estado
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3.5 font-semibold text-right"
                   >
-                    {togglingId === camp.id ? (
-                      <Spinner size="sm" />
-                    ) : (
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          camp.status === "active"
-                            ? "bg-emerald-500"
-                            : "bg-amber-500"
-                        }`}
-                      />
-                    )}
-                    {camp.status === "active" ? "Activa" : "Borrador"}
-                  </button>
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-border)]">
+                {filteredCampaigns.map((camp) => {
+                  const isArchived = camp.status === "archived";
 
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => openEdit(camp)}
-                      className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-primary-text)] hover:bg-[var(--color-bg-elevated)] transition-colors cursor-pointer"
-                      title="Editar campaña"
+                  return (
+                    <tr
+                      key={camp.id}
+                      className="hover:bg-[var(--color-bg-surface)]/50 transition-colors"
                     >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(camp)}
-                      className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
-                      title="Eliminar campaña"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+                      {/* Identificación */}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <span
+                            className="w-3.5 h-3.5 rounded-full shrink-0 ring-4 ring-[var(--color-bg-elevated)]"
+                            style={{ backgroundColor: camp.color || "#6366f1" }}
+                            title={`Color: ${camp.color}`}
+                          />
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm text-[var(--color-text-primary)] truncate">
+                              {camp.name}
+                            </p>
+                            <span className="flex items-center gap-1 text-xs text-[var(--color-text-muted)] mt-0.5">
+                              <Tag className="w-3 h-3" />/{camp.slug}
+                            </span>
+                            {camp.description && (
+                              <p className="text-xs text-[var(--color-text-secondary)] mt-1 line-clamp-1 max-w-xs">
+                                {camp.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Fechas */}
+                      <td className="px-6 py-4 text-xs text-[var(--color-text-secondary)] whitespace-nowrap">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="flex items-center gap-1.5">
+                            <Calendar className="w-3 h-3 text-[var(--color-text-muted)]" />
+                            {formatDateDisplay(camp.startsAt)}
+                          </span>
+                          <span className="text-[var(--color-text-muted)] pl-4.5">
+                            → {formatDateDisplay(camp.endsAt)}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Timing Status */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {renderTimingBadge(camp.timingStatus)}
+                      </td>
+
+                      {/* Estado / Toggle */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {isArchived ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-500/10 text-zinc-500 border border-zinc-500/30">
+                            <Lock className="w-3 h-3" />
+                            Archivada
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleStatus(camp)}
+                            disabled={togglingId === camp.id}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors cursor-pointer disabled:opacity-50 w-[96px] justify-center ${
+                              camp.status === "active"
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
+                                : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/20"
+                            }`}
+                          >
+                            {togglingId === camp.id ? (
+                              <Spinner size="sm" />
+                            ) : (
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  camp.status === "active"
+                                    ? "bg-emerald-500"
+                                    : "bg-amber-500"
+                                }`}
+                              />
+                            )}
+                            {camp.status === "active" ? "Activa" : "Borrador"}
+                          </button>
+                        )}
+                      </td>
+
+                      {/* Acciones */}
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openEdit(camp)}
+                            disabled={isArchived}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              isArchived
+                                ? "text-[var(--color-text-muted)] opacity-30 cursor-not-allowed"
+                                : "text-[var(--color-text-muted)] hover:text-[var(--color-primary-text)] hover:bg-[var(--color-bg-elevated)] cursor-pointer"
+                            }`}
+                            title={
+                              isArchived
+                                ? "Campaña archivada (no editable)"
+                                : "Editar campaña"
+                            }
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(camp)}
+                            className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                            title="Eliminar campaña"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {/* Modal Crear / Editar */}
-      <Modal
+      {/* Modal de Campaña */}
+      <CampaignModal
         open={modalOpen}
         onClose={closeModal}
-        title={editing ? "Editar campaña" : "Nueva campaña"}
-      >
-        <form onSubmit={handleSave} className="space-y-4">
-          <Input
-            label="Nombre de la campaña"
-            value={name}
-            onChange={(e) => handleNameChange(e.target.value)}
-            placeholder="Día de la Madre, Hot Sale..."
-            required
-            autoFocus
-          />
-
-          <Input
-            label="Identificador único (Slug)"
-            value={slug}
-            onChange={(e) => handleSlugChange(e.target.value)}
-            placeholder="dia-de-la-madre"
-            required
-          />
-
-          <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-              Descripción interna (opcional)
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => {
-                setDescription(e.target.value);
-              }}
-              rows={2}
-              placeholder="Notas para el equipo o detalles de la estrategia..."
-              className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors resize-none"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-                Inicio
-              </label>
-              <input
-                type="datetime-local"
-                value={startsAt}
-                onChange={(e) => {
-                  setStartsAt(e.target.value);
-                }}
-                required
-                className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-                Fin
-              </label>
-              <input
-                type="datetime-local"
-                value={endsAt}
-                onChange={(e) => {
-                  setEndsAt(e.target.value);
-                }}
-                required
-                className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-              Color identificador
-            </label>
-            <div className="flex items-center gap-2 flex-wrap">
-              {COLOR_PALETTE.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => {
-                    setColor(c);
-                  }}
-                  className={`w-7 h-7 rounded-full cursor-pointer transition-transform ${
-                    color === c
-                      ? "ring-2 ring-offset-2 ring-[var(--color-primary)] scale-110"
-                      : "hover:scale-105 opacity-80 hover:opacity-100"
-                  }`}
-                  style={{ backgroundColor: c }}
-                  title={c}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="flex gap-3 pt-4 justify-end border-t border-[var(--color-border)]">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={closeModal}
-              disabled={saving}
-            >
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={saving}>
-              {saving
-                ? "Guardando..."
-                : editing
-                  ? "Guardar cambios"
-                  : "Crear campaña"}
-            </Button>
-          </div>
-        </form>
-      </Modal>
+        onSave={handleSave}
+        editing={editing}
+        saving={saving}
+      />
     </div>
   );
 }

@@ -15,6 +15,10 @@ const {
   getActiveDiscounts,
   resolveProductPricing,
 } = require("./discounts.service");
+const {
+  getCachedProducts,
+  setCachedProducts,
+} = require("../../utils/cache/productsCache");
 const sanitizeHtml = require("sanitize-html");
 
 const sanitizeDescription = (html) =>
@@ -43,24 +47,53 @@ const skuInclude = {
   order: [["sort_order", "ASC"]],
 };
 
+// Inclusiones estándar para serializar un producto completo hacia el storefront
+const defaultProductIncludes = [
+  {
+    model: Category,
+    as: "category", // o simplemente Category si no usás alias
+    attributes: ["id", "name", "slug"],
+  },
+  {
+    model: TagValue,
+    as: "tagValues",
+    required: false,
+    include: [
+      {
+        model: Tag,
+        as: "tag",
+        attributes: ["id", "name"],
+      },
+    ],
+  },
+];
+
 const list = async (tenantId, query = {}, storeSettings) => {
+  if (!tenantId) {
+    return { products: [], total: 0, page: 1, totalPages: 0 };
+  }
+
+  // 1. Revisar caché en memoria (saltea si es búsqueda de texto libre)
+  const cached = getCachedProducts(tenantId, query);
+  if (cached) return cached;
+
   const {
     page = 1,
-    limit = 50,
+    limit = 24, // Optimizado a 24 para grillas responsivas (2, 3 y 4 columnas)
     search,
     categoryId,
     categorySlug,
     tagIds,
   } = query;
-  const offset = (page - 1) * limit;
+  const parsedLimit = Number(limit);
+  const parsedPage = Number(page);
+  const offset = (parsedPage - 1) * parsedLimit;
 
   const conditions = ['"Product"."status" = \'active\''];
   const bindParams = [];
 
-  if (tenantId) {
-    conditions.push(`"Product"."tenant_id" = $${bindParams.length + 1}`);
-    bindParams.push(tenantId);
-  }
+  conditions.push(`"Product"."tenant_id" = $${bindParams.length + 1}`);
+  bindParams.push(tenantId);
 
   if (search) {
     conditions.push(
@@ -76,7 +109,7 @@ const list = async (tenantId, query = {}, storeSettings) => {
 
   if (categorySlug) {
     const cat = await Category.findOne({
-      where: { slug: categorySlug },
+      where: { tenantId, slug: categorySlug, status: "active" },
       attributes: ["id"],
     });
     if (cat) resolvedCategoryId = cat.id;
@@ -127,7 +160,14 @@ const list = async (tenantId, query = {}, storeSettings) => {
   const total = parseInt(countResult[0]?.total || "0");
 
   if (total === 0) {
-    return { products: [], total: 0, page: Number(page), totalPages: 0 };
+    const emptyResult = {
+      products: [],
+      total: 0,
+      page: parsedPage,
+      totalPages: 0,
+    };
+    setCachedProducts(tenantId, query, emptyResult);
+    return emptyResult;
   }
 
   const idResult = await sequelize.query(
@@ -137,19 +177,21 @@ const list = async (tenantId, query = {}, storeSettings) => {
      ORDER BY "Product"."created_at" DESC
      LIMIT $${bindParams.length + 1} OFFSET $${bindParams.length + 2}`,
     {
-      bind: [...bindParams, Number(limit), offset],
+      bind: [...bindParams, parsedLimit, offset],
       type: sequelize.QueryTypes.SELECT,
     },
   );
   const ids = idResult.map((r) => r.id);
 
   if (ids.length === 0) {
-    return {
+    const emptyPageResult = {
       products: [],
       total,
-      page: Number(page),
-      totalPages: Math.ceil(total / limit),
+      page: parsedPage,
+      totalPages: Math.ceil(total / parsedLimit),
     };
+    setCachedProducts(tenantId, query, emptyPageResult);
+    return emptyPageResult;
   }
 
   const products = await Product.findAll({
@@ -177,15 +219,24 @@ const list = async (tenantId, query = {}, storeSettings) => {
   // Aplicar proxy CDN a todas las imágenes de los productos
   products.forEach(proxyProductImages);
 
-  return {
+  const result = {
     products,
     total,
-    page: Number(page),
-    totalPages: Math.ceil(total / limit),
+    page: parsedPage,
+    totalPages: Math.ceil(total / parsedLimit),
   };
+
+  // 2. Guardar en memoria LRU para siguientes peticiones idénticas
+  setCachedProducts(tenantId, query, result);
+
+  return result;
 };
 
 const getBySlug = async (tenantId, slug, storeSettings) => {
+  if (!tenantId || !slug) {
+    throw Object.assign(new Error("Parámetros inválidos"), { status: 400 });
+  }
+
   const product = await Product.findOne({
     where: { tenantId, slug, status: "active" },
     include: [
@@ -228,4 +279,99 @@ const getBySlug = async (tenantId, slug, storeSettings) => {
   return product;
 };
 
-module.exports = { list, getBySlug };
+const getFeaturedProducts = async (tenantId, config = {}) => {
+  const mode = config.mode || "auto"; // "manual" | "tag" | "auto"
+  const limit = config.limit || 8;
+
+  // CASO 1: Selección manual explícita por IDs
+  if (mode === "manual" && config.productIds?.length) {
+    const products = await Product.findAll({
+      where: {
+        tenantId,
+        id: config.productIds,
+        status: "active",
+      },
+      include: defaultProductIncludes, // Categorías, imágenes, tags, etc.
+    });
+    if (products.length > 0) return products;
+  }
+
+  // CASO 2: Tag específico (si está configurado)
+  if (mode === "tag" && config.tagName) {
+    const products = await Product.findAll({
+      where: { tenantId, status: "active" },
+      include: [
+        ...defaultProductIncludes,
+        {
+          model: TagValue,
+          required: true,
+          include: [
+            {
+              model: Tag,
+              as: "tag",
+              where: { name: { [Op.iLike]: config.tagName } },
+            },
+          ],
+        },
+      ],
+      limit,
+    });
+    if (products.length > 0) return products;
+  }
+
+  // CASO 3: Los Más Pedidos (Top Sales por OrderItems)
+  // Agrupamos OrderItems de órdenes confirmadas/entregadas de ese tenant
+  // const topSold = await OrderItem.findAll({
+  //   attributes: [
+  //     "productId",
+  //     [sequelize.fn("COUNT", sequelize.col("id")), "salesCount"],
+  //   ],
+  //   include: [
+  //     {
+  //       model: Order,
+  //       attributes: [],
+  //       where: { tenantId, status: { [Op.notIn]: ["cancelled", "refunded"] } },
+  //     },
+  //   ],
+  //   group: ["productId"],
+  //   order: [[sequelize.literal('"salesCount"'), "DESC"]],
+  //   limit,
+  // });
+
+  // const topProductIds = topSold.map((item) => item.productId).filter(Boolean);
+
+  // if (topProductIds.length > 0) {
+  //   featured = await Product.findAll({
+  //     where: {
+  //       tenantId,
+  //       id: topProductIds,
+  //       status: "active",
+  //     },
+  //     include: defaultProductIncludes,
+  //   });
+  // }
+
+  let featured = [];
+  // FALLBACK FINAL: Si no hay ventas suficientes (tienda nueva), traer los últimos creados
+  if (featured.length < 4) {
+    const remainingLimit = limit - featured.length;
+    const existingIds = featured.map((p) => p.id);
+
+    const recent = await Product.findAll({
+      where: {
+        tenantId,
+        status: "active",
+        id: { [Op.notIn]: existingIds },
+      },
+      order: [["createdAt", "DESC"]],
+      limit: remainingLimit,
+      include: defaultProductIncludes,
+    });
+
+    featured = [...featured, ...recent];
+  }
+
+  return featured;
+};
+
+module.exports = { list, getBySlug, getFeaturedProducts };

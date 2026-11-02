@@ -1,5 +1,4 @@
 const { Billing } = require("../models");
-const settingsService = require("../services/admin/settings.service");
 
 const storeStatus = async (req, res, next) => {
   try {
@@ -7,7 +6,7 @@ const storeStatus = async (req, res, next) => {
     if (!tenantId) return next();
 
     // 1. Excepción: permitir leer settings públicos siempre (para logo, redes y aviso)
-    if (req.originalUrl && req.originalUrl.includes("/store/settings")) {
+    if (req.originalUrl.includes("/store/bootstrap")) {
       return next();
     }
 
@@ -17,6 +16,8 @@ const storeStatus = async (req, res, next) => {
       attributes: ["status"],
     });
 
+    req.billingStatus = billing?.status || "active";
+
     if (billing?.status === "suspended") {
       return res.status(503).json({
         error: "store_suspended",
@@ -24,9 +25,8 @@ const storeStatus = async (req, res, next) => {
       });
     }
 
-    // 3. Estado operativo del Tenant
-    const settings = await settingsService.getAll(tenantId);
-    const status = settings?.storeStatus || "active";
+    // 3. Estado operativo del Tenant ( Leído directo de req, sin volver a consultar DB/Service)
+    const status = req.storeSettings?.storeStatus || "active";
 
     // Si está en mantenimiento: bloqueo total de navegación de catálogo y checkout
     if (status === "maintenance") {

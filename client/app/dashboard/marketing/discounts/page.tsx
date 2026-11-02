@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAlert } from "@/context/AlertContext";
 import { useUnsavedChanges } from "@/context/UnsavedChangesContext";
 import {
@@ -9,10 +9,9 @@ import {
   Trash2,
   Percent,
   Calendar,
-  Eye,
-  EyeOff,
-  AlertTriangle,
-  Megaphone,
+  Edit,
+  Lock,
+  Layers,
 } from "lucide-react";
 import { Button, Spinner } from "@/components/ui";
 import DiscountModal from "@/components/admin/discounts/DiscountModal";
@@ -23,39 +22,49 @@ import {
   DISCOUNT_MESSAGES,
 } from "@/constants/discounts";
 import { toLocalDatetimeInput, formatDateLocale } from "@/utils/date";
+import { OverlapsAlert } from "@/components/ui/OverlapsAlert";
 
-function getDiscountState(d) {
-  if (d.status === "draft") {
-    return {
-      key: "draft",
-      label: "Borrador",
-      cls: "bg-[var(--color-bg-elevated)] text-[var(--color-text-secondary)] border border-[var(--color-border)]",
-    };
+// Prioridad operativa idéntica a campañas: En curso -> Programados -> Borradores -> Archivados/Finalizados
+const calculateSortWeight = (d: any): number => {
+  if (d.status === "archived") return 4;
+  if (d.status === "draft") return 3;
+  if (d.status === "active") {
+    const now = new Date();
+    const start = d.campaign?.startsAt
+      ? new Date(d.campaign.startsAt)
+      : d.startAt
+        ? new Date(d.startAt)
+        : null;
+    const end = d.campaign?.endsAt
+      ? new Date(d.campaign.endsAt)
+      : d.endAt
+        ? new Date(d.endAt)
+        : null;
+
+    if (start && start > now) return 2; // Programado
+    if (end && end < now) return 4; // Vencido
+    return 1; // En curso
   }
+  return 5;
+};
+
+const getTimingStatus = (d: any) => {
   const now = new Date();
-  const start = d.startAt ? new Date(d.startAt) : null;
-  const end = d.endAt ? new Date(d.endAt) : null;
+  const start = d.campaign?.startsAt
+    ? new Date(d.campaign.startsAt)
+    : d.startAt
+      ? new Date(d.startAt)
+      : null;
+  const end = d.campaign?.endsAt
+    ? new Date(d.campaign.endsAt)
+    : d.endAt
+      ? new Date(d.endAt)
+      : null;
 
-  if (start && start > now) {
-    return {
-      key: "scheduled",
-      label: "Programado",
-      cls: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
-    };
-  }
-  if (end && end < now) {
-    return {
-      key: "expired",
-      label: "Vencido",
-      cls: "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
-    };
-  }
-  return {
-    key: "active",
-    label: "Activo",
-    cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
-  };
-}
+  if (start && start > now) return "upcoming";
+  if (end && end < now) return "ended";
+  return "running";
+};
 
 export default function DiscountsPage() {
   const Alert = useAlert();
@@ -65,16 +74,27 @@ export default function DiscountsPage() {
   const [overlaps, setOverlaps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_DISCOUNT_FORM);
+  const [activeTab, setActiveTab] = useState<
+    "all" | "active" | "draft" | "archived"
+  >("all");
 
   const refetch = async () => {
     try {
       const { data } = await api.get("/admin/discounts");
-      setDiscounts(data.discounts || []);
-      setOverlaps(data.overlaps || []);
-    } catch {
-      /* ignore */
+      setDiscounts(data.discounts || data || []);
+      if (data.overlaps) {
+        setOverlaps(data.overlaps);
+      } else {
+        const ovRes = await api
+          .get("/admin/discounts/overlaps")
+          .catch(() => ({ data: [] }));
+        setOverlaps(ovRes.data || []);
+      }
+    } catch (err) {
+      console.error("Error al cargar descuentos:", err);
     }
   };
 
@@ -82,17 +102,46 @@ export default function DiscountsPage() {
     refetch().finally(() => setLoading(false));
   }, []);
 
+  const filteredDiscounts = useMemo(() => {
+    const list =
+      activeTab === "all"
+        ? [...discounts]
+        : discounts.filter((d) => d.status === activeTab);
+
+    return list.sort((a, b) => {
+      const weightA = calculateSortWeight(a);
+      const weightB = calculateSortWeight(b);
+      if (weightA !== weightB) return weightA - weightB;
+
+      const dateA = a.campaign?.startsAt || a.startAt;
+      const dateB = b.campaign?.startsAt || b.startAt;
+      return new Date(dateB).getTime() - new Date(dateA).getTime();
+    });
+  }, [discounts, activeTab]);
+
+  const counts = useMemo(
+    () => ({
+      all: discounts.length,
+      active: discounts.filter((d) => d.status === "active").length,
+      draft: discounts.filter((d) => d.status === "draft").length,
+      archived: discounts.filter((d) => d.status === "archived").length,
+    }),
+    [discounts],
+  );
+
   const openNew = () => {
     setEditingId("new");
-
     setForm({
       ...EMPTY_DISCOUNT_FORM,
+      status: "draft",
       campaignId: "",
       startAt: toLocalDatetimeInput(new Date().toISOString()),
+      endAt: "",
     });
   };
 
   const openEdit = (d) => {
+    if (d.status === "archived") return;
     setEditingId(d.id);
 
     setForm({
@@ -155,13 +204,31 @@ export default function DiscountsPage() {
   };
 
   const handleSave = async () => {
+    if (!form.name?.trim()) {
+      Alert.fire({
+        message: "El nombre del descuento es requerido",
+        type: "warning",
+      });
+      return;
+    }
+
+    if (form.endAt && new Date(form.endAt) <= new Date(form.startAt)) {
+      Alert.fire({
+        message: "La fecha de fin debe ser posterior a la fecha de inicio.",
+        type: "warning",
+      });
+      return;
+    }
+
     const payload = {
       name: form.name.trim(),
       type: form.type,
       percentage: Number(form.percentage),
       status: form.status,
       campaignId: form.campaignId ? Number(form.campaignId) : null,
-      startAt: new Date(form.startAt).toISOString(),
+      startAt: form.startAt
+        ? new Date(form.startAt).toISOString()
+        : new Date().toISOString(),
       endAt: form.endAt ? new Date(form.endAt).toISOString() : null,
       config: buildConfig(),
     };
@@ -224,22 +291,56 @@ export default function DiscountsPage() {
   };
 
   const handleToggle = async (d) => {
+    if (d.status === "archived") {
+      Alert.fire({
+        message: "Los descuentos archivados no pueden conmutarse directamente.",
+        type: "warning",
+      });
+      return;
+    }
+
     const next = d.status === "active" ? "draft" : "active";
+    setTogglingId(d.id);
     try {
       await api.patch(`/admin/discounts/${d.id}/status`, { status: next });
-      refetch();
-    } catch {
-      Alert.fire({ message: DISCOUNT_MESSAGES.STATUS_ERROR, type: "error" });
+      await refetch();
+    } catch (err) {
+      Alert.fire({
+        message: err.response?.data?.error || DISCOUNT_MESSAGES.STATUS_ERROR,
+        type: "error",
+      });
+    } finally {
+      setTogglingId(null);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-32">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  const renderTimingBadge = (d: any) => {
+    const timing = getTimingStatus(d);
+    switch (timing) {
+      case "running":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            En curso
+          </span>
+        );
+      case "upcoming":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+            Programado
+          </span>
+        );
+      case "ended":
+      default:
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-500/10 text-zinc-500 dark:text-zinc-400 border border-zinc-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
+            Finalizado
+          </span>
+        );
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -247,10 +348,11 @@ export default function DiscountsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
-            Descuentos
+            Descuentos y Promociones
           </h1>
-          <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-            Creá descuentos por tipo y programá su duración
+          <p className="text-sm text-[var(--color-text-muted)] mt-1">
+            Creá reglas de descuento globales, por categoría o asociadas a
+            campañas especiales.
           </p>
         </div>
         <Button onClick={openNew}>
@@ -259,134 +361,272 @@ export default function DiscountsPage() {
       </div>
 
       {/* Alerta de solapamiento */}
-      {overlaps.length > 0 && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 transition-colors">
-          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-semibold mb-2">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            Productos con más de un descuento aplicado
+      <OverlapsAlert overlaps={overlaps} />
+
+      {/* Pestañas de estado */}
+      <div className="flex border-b border-[var(--color-border)] gap-6 text-sm font-medium">
+        <button
+          type="button"
+          onClick={() => setActiveTab("all")}
+          className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+            activeTab === "all"
+              ? "border-[var(--color-primary)] text-[var(--color-primary-text)] font-semibold"
+              : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+          }`}
+        >
+          Todos ({counts.all})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("active")}
+          className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+            activeTab === "active"
+              ? "border-[var(--color-primary)] text-[var(--color-primary-text)] font-semibold"
+              : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+          }`}
+        >
+          Activos ({counts.active})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("draft")}
+          className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+            activeTab === "draft"
+              ? "border-[var(--color-primary)] text-[var(--color-primary-text)] font-semibold"
+              : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+          }`}
+        >
+          Borradores ({counts.draft})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("archived")}
+          className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+            activeTab === "archived"
+              ? "border-[var(--color-primary)] text-[var(--color-primary-text)] font-semibold"
+              : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+          }`}
+        >
+          Archivados ({counts.archived})
+        </button>
+      </div>
+
+      {/* Tabla Principal */}
+      <div className="relative min-h-[220px] bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl overflow-hidden shadow-xs">
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center z-10 bg-[var(--color-bg-base)]/60 backdrop-blur-xs">
+            <Spinner size="lg" />
           </div>
-          <div className="space-y-1.5 pl-6">
-            {overlaps.map((o) => (
-              <p
-                key={o.productId}
-                className="text-sm text-amber-900/90 dark:text-amber-200/90"
-              >
-                <span className="font-semibold">{o.name}</span>:{" "}
-                {o.discounts
-                  .map((d) => `${d.name} (${d.percentage}%)`)
-                  .join(" + ")}
-              </p>
-            ))}
-          </div>
-        </div>
-      )}
+        )}
 
-      {/* Lista de descuentos */}
-      <div className="space-y-3">
-        {discounts.map((d) => {
-          const state = getDiscountState(d);
-          return (
-            <div
-              key={d.id}
-              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-5 transition-colors shadow-xs"
-            >
-              <div className="flex items-start sm:items-center justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-semibold text-base text-[var(--color-text-primary)]">
-                      {d.name}
-                    </h3>
-                    <span
-                      className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${state.cls}`}
-                    >
-                      {state.label}
-                    </span>
-
-                    {/* Badge de Campaña si está vinculada */}
-                    {d.campaign && (
-                      <span
-                        className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md font-medium"
-                        style={{
-                          backgroundColor: `${d.campaign.color || "#6366f1"}15`,
-                          color: d.campaign.color || "#6366f1",
-                        }}
-                      >
-                        <Megaphone className="w-3 h-3" />
-                        {d.campaign.name}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-3 mt-1.5 text-sm">
-                    <span className="text-[var(--color-primary-text)] font-bold">
-                      {d.percentage}% OFF
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">•</span>
-                    <span className="text-[var(--color-text-secondary)]">
-                      {DISCOUNT_TYPE_LABELS[d.type] || d.type}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 mt-2 text-xs text-[var(--color-text-muted)]">
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span>
-                      {formatDateLocale(d.startAt)} →{" "}
-                      {d.endAt ? formatDateLocale(d.endAt) : "Sin fecha límite"}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => openEdit(d)}
-                  >
-                    Editar
-                  </Button>
-                  <button
-                    type="button"
-                    onClick={() => handleToggle(d)}
-                    title={
-                      d.status === "active" ? "Pasar a borrador" : "Publicar"
-                    }
-                    className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-primary-text)] rounded-lg hover:bg-[var(--color-bg-elevated)] transition-colors cursor-pointer"
-                  >
-                    {d.status === "active" ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(d)}
-                    className="p-2 text-[var(--color-text-muted)] hover:text-red-600 dark:hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors cursor-pointer"
-                    title="Eliminar descuento"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        {discounts.length === 0 && (
-          <div className="text-center py-16 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg-surface)]/30">
-            <Percent className="w-10 h-10 text-[var(--color-text-muted)] mx-auto mb-3 opacity-60" />
+        {filteredDiscounts.length === 0 && !loading ? (
+          <div className="text-center py-16 px-4">
+            <Percent className="w-8 h-8 text-[var(--color-text-muted)] mx-auto mb-2 opacity-60" />
             <p className="font-medium text-[var(--color-text-primary)]">
-              No hay descuentos creados
+              No hay descuentos en esta sección
             </p>
             <p className="text-xs text-[var(--color-text-muted)] mt-1">
-              Creá descuentos globales, por categoría, por precio o por
-              producto.
+              Los descuentos creados o programados aparecerán aquí según su
+              estado.
             </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-[var(--color-text-primary)]">
+              <thead className="bg-[var(--color-bg-surface)] border-b border-[var(--color-border)] text-xs text-[var(--color-text-muted)] uppercase tracking-wider">
+                <tr>
+                  <th scope="col" className="px-6 py-3.5 font-semibold">
+                    Descuento
+                  </th>{" "}
+                  <th scope="col" className="px-6 py-3.5 font-semibold">
+                    Campaña asociada
+                  </th>
+                  <th scope="col" className="px-6 py-3.5 font-semibold">
+                    Porcentaje & Tipo
+                  </th>
+                  <th scope="col" className="px-6 py-3.5 font-semibold">
+                    Vigencia
+                  </th>
+                  <th scope="col" className="px-6 py-3.5 font-semibold">
+                    Tiempo
+                  </th>
+                  <th scope="col" className="px-6 py-3.5 font-semibold">
+                    Estado
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3.5 font-semibold text-right"
+                  >
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-border)]">
+                {filteredDiscounts.map((d) => {
+                  const isArchived = d.status === "archived";
+                  const isActive = d.status === "active";
+                  const effectiveStart = d.campaign?.startsAt || d.startAt;
+                  const effectiveEnd = d.campaign?.endsAt || d.endAt;
+
+                  return (
+                    <tr
+                      key={d.id}
+                      className="hover:bg-[var(--color-bg-surface)]/50 transition-colors"
+                    >
+                      {/* Identificación */}
+                      <td className="px-6 py-4">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm text-[var(--color-text-primary)] truncate">
+                            {d.name}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 mt-1">
+                          {d.campaign ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md"
+                              style={{
+                                backgroundColor: `${d.campaign.color || "#6366f1"}15`,
+                                color: d.campaign.color || "#6366f1",
+                              }}
+                            >
+                              <Calendar className="w-4 h-4" />
+                              {d.campaign.name}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20">
+                              <Layers className="w-6 h-6" />
+                              Descuento Independiente
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      {/* Porcentaje y Tipo */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-[var(--color-primary)]/10 text-[var(--color-primary-text)] border border-[var(--color-primary)]/20">
+                            {d.percentage}% OFF
+                          </span>
+                          <span className="text-xs text-[var(--color-text-secondary)]">
+                            {DISCOUNT_TYPE_LABELS[d.type] || d.type}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Vigencia */}
+                      <td className="px-6 py-4 text-xs text-[var(--color-text-secondary)] whitespace-nowrap">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="flex items-center gap-1.5">
+                            <Calendar className="w-3 h-3 text-[var(--color-text-muted)]" />
+                            {formatDateLocale(effectiveStart)}
+                          </span>
+                          <span className="text-[var(--color-text-muted)] pl-4.5">
+                            →{" "}
+                            {effectiveEnd
+                              ? formatDateLocale(effectiveEnd)
+                              : "Sin fecha límite"}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Timing Status */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {renderTimingBadge(d)}
+                      </td>
+
+                      {/* Estado / Toggle */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {isArchived ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-500/10 text-zinc-500 border border-zinc-500/30">
+                            <Lock className="w-3 h-3" />
+                            Archivado
+                          </span>
+                        ) : (
+                          (() => {
+                            // 🔒 Verificamos si la campaña padre está en borrador
+                            const isCampaignDraft =
+                              d.campaign && d.campaign.status === "draft";
+                            const isDisabled =
+                              togglingId === d.id || isCampaignDraft;
+
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => handleToggle(d)}
+                                disabled={isDisabled}
+                                title={
+                                  isCampaignDraft
+                                    ? `La campaña "${d.campaign.name}" está en borrador. Activá la campaña para poder activar este descuento.`
+                                    : undefined
+                                }
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors w-[96px] justify-center ${
+                                  isCampaignDraft
+                                    ? "opacity-40 cursor-not-allowed bg-zinc-500/10 text-zinc-500 border-zinc-500/20"
+                                    : isActive
+                                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 cursor-pointer disabled:opacity-50"
+                                      : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/20 cursor-pointer disabled:opacity-50"
+                                }`}
+                              >
+                                {togglingId === d.id ? (
+                                  <Spinner size="sm" />
+                                ) : (
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      isActive
+                                        ? "bg-emerald-500"
+                                        : "bg-amber-500"
+                                    }`}
+                                  />
+                                )}
+                                {isActive ? "Activo" : "Borrador"}
+                              </button>
+                            );
+                          })()
+                        )}
+                      </td>
+
+                      {/* Acciones */}
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openEdit(d)}
+                            disabled={isArchived}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              isArchived
+                                ? "text-[var(--color-text-muted)] opacity-30 cursor-not-allowed"
+                                : "text-[var(--color-text-muted)] hover:text-[var(--color-primary-text)] hover:bg-[var(--color-bg-elevated)] cursor-pointer"
+                            }`}
+                            title={
+                              isArchived
+                                ? "Archivado (solo lectura)"
+                                : "Editar descuento"
+                            }
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(d)}
+                            className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                            title="Eliminar descuento"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {/* Modal Abstraído */}
+      {/* Modal de Descuento */}
       <DiscountModal
         open={Boolean(editingId)}
         onClose={closeForm}

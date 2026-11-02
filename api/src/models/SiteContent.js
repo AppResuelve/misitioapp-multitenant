@@ -26,7 +26,7 @@ module.exports = (sequelize, DataTypes) => {
         field: "slot_key",
       },
       status: {
-        type: DataTypes.ENUM("draft", "active"),
+        type: DataTypes.ENUM("draft", "active", "archived"),
         allowNull: false,
         defaultValue: "draft",
       },
