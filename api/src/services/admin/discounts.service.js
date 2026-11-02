@@ -222,11 +222,16 @@ const update = async (tenantId, id, data) => {
     );
   }
 
-  // 4. Validación de configuración según el tipo
-  if (data.type) {
-    const nextConfig =
-      data.config !== undefined ? data.config : discount.config;
-    validateConfig(data.type, nextConfig);
+  // 4. Validación y asignación de configuración según el tipo resultante
+  const finalType = data.type || discount.type;
+  let finalConfig = discount.config;
+
+  if (data.config !== undefined) {
+    // Se valida siempre que venga config nuevo, use el type nuevo o el existente
+    finalConfig = validateConfig(finalType, data.config);
+  } else if (data.type) {
+    // Si solo cambió el type, validamos contra el config que ya tenía
+    finalConfig = validateConfig(finalType, discount.config);
   }
 
   // 5. Armado del payload a actualizar
@@ -235,8 +240,14 @@ const update = async (tenantId, id, data) => {
   if (data.type !== undefined) payload.type = data.type;
   if (data.percentage !== undefined)
     payload.percentage = Number(data.percentage);
-  if (data.config !== undefined) payload.config = data.config;
   if (data.status !== undefined) payload.status = data.status;
+
+  // Asignamos el config validado y forzamos a Sequelize a marcarlo como modificado
+  if (data.config !== undefined || data.type !== undefined) {
+    payload.config = finalConfig;
+    discount.set("config", finalConfig);
+    discount.changed("config", true); // 👈 Forzar a Sequelize a escribir el JSON en la BD
+  }
 
   // Asignamos la campaña normalizada
   if ("campaignId" in data) {
