@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use client";
 import { useState, useRef } from "react";
 import { Upload, X } from "lucide-react";
@@ -7,6 +6,15 @@ import { compressImages } from "@/utils/compressImage";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAlert } from "@/context/AlertContext";
 
+interface ImageUploadProps {
+  images?: string[];
+  onChange: (images: string[]) => void;
+  max?: number;
+  cols?: number;
+  label?: string;
+  folder?: string;
+}
+
 export default function ImageUpload({
   images = [],
   onChange,
@@ -14,7 +22,7 @@ export default function ImageUpload({
   cols = 4,
   label,
   folder = "productos",
-}) {
+}: ImageUploadProps) {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
   const Alert = useAlert();
@@ -25,8 +33,9 @@ export default function ImageUpload({
     4: "grid-cols-4",
   };
 
-  const handleUpload = async (e) => {
-    const files = Array.from(e.target.files);
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    const files: File[] = Array.from(e.target.files);
     if (!files.length) return;
 
     if (images.length + files.length > max) {

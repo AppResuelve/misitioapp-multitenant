@@ -33,8 +33,9 @@ export default function LinkDestinationSelector({
   gridCols = "grid-cols-1 sm:grid-cols-2",
 }: LinkDestinationSelectorProps) {
   const options = useMemo(() => {
-    if (!allowedLinks) return LINK_TYPES;
-    return LINK_TYPES.filter((lt) => allowedLinks.includes(lt.value));
+    const list = [...LINK_TYPES];
+    if (!allowedLinks) return list;
+    return list.filter((lt) => allowedLinks.includes(lt.value));
   }, [allowedLinks]);
 
   const handleLinkTypeChange = (newType: string) => {
