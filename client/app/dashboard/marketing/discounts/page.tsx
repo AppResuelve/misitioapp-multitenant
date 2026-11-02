@@ -12,6 +12,7 @@ import {
   Edit,
   Lock,
   Layers,
+  ArrowRight,
 } from "lucide-react";
 import { Button, Spinner } from "@/components/ui";
 import DiscountModal from "@/components/admin/discounts/DiscountModal";
@@ -521,8 +522,8 @@ export default function DiscountsPage() {
                             <Calendar className="w-3 h-3 text-[var(--color-text-muted)]" />
                             {formatDateLocale(effectiveStart)}
                           </span>
-                          <span className="text-[var(--color-text-muted)] pl-4.5">
-                            →{" "}
+                          <span className="flex items-center text-[var(--color-text-muted)] gap-1.5 pl-2.5">
+                            <ArrowRight className="w-3 h-3" />
                             {effectiveEnd
                               ? formatDateLocale(effectiveEnd)
                               : "Sin fecha límite"}
