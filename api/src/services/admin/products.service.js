@@ -15,6 +15,9 @@ const { resolveDiscountFields } = require("../../utils/discount");
 const { generateSkuCode } = require("../../utils/skuGenerator");
 const { applyUnitPricing } = require("../../utils/unitPricing");
 const { resolveTagValueIds } = require("../../utils/resolveTagValueIds");
+const {
+  invalidateBootstrapCache,
+} = require("../../utils/cache/bootstrapCache");
 
 const skuInclude = {
   model: ProductSku,
@@ -1302,6 +1305,65 @@ const systemUpdate = async (tenantId, field, value, productIds) => {
   return { updated, skipped, warnings };
 };
 
+const deleteAllProducts = async (tenantId) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    // 1. Relaciones Producto - Tag
+    await sequelize.query(
+      `DELETE FROM product_tags 
+       WHERE product_id IN (SELECT id FROM products WHERE tenant_id = :tenantId)`,
+      {
+        replacements: { tenantId },
+        type: QueryTypes.DELETE,
+        transaction,
+      },
+    );
+
+    // 2. Relaciones SKU - Atributos
+    await sequelize.query(
+      `DELETE FROM sku_attribute_values 
+       WHERE sku_id IN (SELECT id FROM product_skus WHERE tenant_id = :tenantId)`,
+      {
+        replacements: { tenantId },
+        type: QueryTypes.DELETE,
+        transaction,
+      },
+    );
+
+    // 3. SKUs
+    await sequelize.query(
+      `DELETE FROM product_skus WHERE tenant_id = :tenantId`,
+      {
+        replacements: { tenantId },
+        type: QueryTypes.DELETE,
+        transaction,
+      },
+    );
+
+    // 4. Productos
+    await sequelize.query(`DELETE FROM products WHERE tenant_id = :tenantId`, {
+      replacements: { tenantId },
+      type: QueryTypes.DELETE,
+      transaction,
+    });
+
+    await transaction.commit();
+
+    // 5. Invalida la caché del tenant en memoria
+    invalidateBootstrapCache(tenantId);
+
+    return {
+      success: true,
+      message:
+        "Catálogo vaciado con éxito (productos, SKUs y etiquetas eliminados).",
+    };
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
 module.exports = {
   list,
   getById,
@@ -1314,4 +1376,5 @@ module.exports = {
   previewDiff,
   bulkUpdate,
   systemUpdate,
+  deleteAllProducts,
 };

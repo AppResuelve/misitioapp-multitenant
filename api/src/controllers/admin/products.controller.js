@@ -158,6 +158,15 @@ const systemUpdate = async (req, res, next) => {
   }
 };
 
+const deleteAll = async (req, res, next) => {
+  try {
+    const result = await productsService.deleteAllProducts(req.tenant.id);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   list,
   getById,
@@ -170,4 +179,5 @@ module.exports = {
   bulkUpdate,
   previewDiff,
   systemUpdate,
+  deleteAll,
 };

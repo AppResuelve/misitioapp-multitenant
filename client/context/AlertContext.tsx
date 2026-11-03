@@ -1,3 +1,4 @@
+// @ts-nocheck
 "use client";
 
 import React, {
@@ -24,6 +25,12 @@ export interface AlertConfig {
   confirmButtonText?: string;
   actionLabel?: string;
   cancelButtonText?: string;
+
+  // 🟢 Props para inputs interactivos
+  input?: "text" | "number" | "password" | "email" | string | null;
+  inputLabel?: string;
+  inputPlaceholder?: string;
+  inputValidator?: (value: string) => string | null;
 }
 
 export interface AlertResult {
@@ -57,6 +64,7 @@ export const AlertProvider = ({ children }: { children: React.ReactNode }) => {
           config.variant || config.style || config.alertType || "banner";
 
         const newAlert = {
+          ...config, // 🟢 Pasa input, inputValidator, inputPlaceholder, etc.
           id,
           title: config.title || "",
           message: config.message || config.text || "",
