@@ -1,4 +1,5 @@
 const { z } = require("zod");
+const { sanitizeNumber, sanitizeInt } = require("../utils/satinizeNumbers");
 
 const productSchema = z.object({
   name: z.string().min(1, "El nombre es obligatorio"),
@@ -51,24 +52,37 @@ const bulkProductSchema = z.array(
     type: z.enum(["PRODUCTO", "VARIANTE"]).optional().default("PRODUCTO"),
     name: z.string().min(1),
     slug: z.string().optional(),
-    price: z.coerce.number().min(0),
+
+    // 🟢 Limpia el "$" antes de validar el número
+    price: z.preprocess(sanitizeNumber, z.coerce.number().min(0)),
+
     description: z
       .string()
       .max(2000, "La descripción no puede superar los 2000 caracteres")
       .optional(),
     images: z.union([z.string(), z.array(z.string())]).optional(),
-    retailPrice: z.coerce.number().optional(),
-    comparePrice: z.coerce.number().nullable().optional(),
-    discountPercentage: z.coerce
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .nullable()
-      .optional(),
-    wholesalePrice: z.coerce.number().nullable().optional(),
-    wholesaleMinQty: z.coerce.number().int().nullable().optional(),
-    stock: z.coerce.number().int().optional(),
+    retailPrice: z.preprocess(sanitizeNumber, z.coerce.number().optional()),
+    comparePrice: z.preprocess(
+      sanitizeNumber,
+      z.coerce.number().nullable().optional(),
+    ),
+    discountPercentage: z.preprocess(
+      sanitizeInt,
+      z.coerce.number().int().min(1).max(100).nullable().optional(),
+    ),
+    wholesalePrice: z.preprocess(
+      sanitizeNumber,
+      z.coerce.number().nullable().optional(),
+    ),
+    wholesaleMinQty: z.preprocess(
+      sanitizeInt,
+      z.coerce.number().int().nullable().optional(),
+    ),
+
+    // 🟢 Si el stock puede ser decimal (ej. kilos/gramos), SACÁ .int()
+    // O si DEBE ser entero en la base de datos, usamos sanitizeInt para que Math.round no tire error
+    stock: z.preprocess(sanitizeInt, z.coerce.number().int().optional()),
+
     sku: z.string().nullable().optional(),
     tags: z
       .union([z.array(z.string()), z.string()])
@@ -77,10 +91,19 @@ const bulkProductSchema = z.array(
     skus: z
       .array(
         z.object({
-          retailPrice: z.coerce.number().optional(),
-          wholesalePrice: z.coerce.number().nullable().optional(),
-          wholesaleMinQty: z.coerce.number().int().nullable().optional(),
-          stock: z.coerce.number().int().optional(),
+          retailPrice: z.preprocess(
+            sanitizeNumber,
+            z.coerce.number().optional(),
+          ),
+          wholesalePrice: z.preprocess(
+            sanitizeNumber,
+            z.coerce.number().nullable().optional(),
+          ),
+          wholesaleMinQty: z.preprocess(
+            sanitizeInt,
+            z.coerce.number().int().nullable().optional(),
+          ),
+          stock: z.preprocess(sanitizeInt, z.coerce.number().int().optional()),
           sku: z.string().nullable().optional(),
           images: z.array(z.string()).optional(),
           status: z.enum(["active", "draft"]).optional(),

@@ -71,6 +71,8 @@ const remove = async (req, res, next) => {
 
 const bulkCreate = async (req, res, next) => {
   try {
+    console.log(req.body);
+
     const products = validateBulkProducts(req.body);
     const { categoryId } = req.body;
     const result = await productsService.bulkCreate(
