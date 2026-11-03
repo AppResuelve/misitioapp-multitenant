@@ -354,31 +354,58 @@ const getBillingStatus = async (req, res, next) => {
 
 const setBillingStatus = async (req, res, next) => {
   try {
-    const { status, currentPeriodStart, currentPeriodEnd, graceUntil } =
-      req.body;
+    // 1. Acepta status o billing_status (lo que manda la Platform)
+    const status = req.body.status || req.body.billing_status;
+    const { currentPeriodStart, currentPeriodEnd, graceUntil } = req.body;
+
     if (!status) {
       return res.status(400).json({ error: "status es requerido" });
     }
 
+    const tenantId = req.tenant.id;
     const payload = { status };
+
     if (currentPeriodStart !== undefined)
       payload.currentPeriodStart = currentPeriodStart;
     if (currentPeriodEnd !== undefined)
       payload.currentPeriodEnd = currentPeriodEnd;
     if (graceUntil !== undefined) payload.graceUntil = graceUntil;
 
+    // 2. Transiciones de estado
     if (status === "active") {
       payload.suspendedAt = null;
+      payload.graceUntil = null;
+
+      // Si se activa y no mandaron fecha de fin manual, calcula el nuevo ciclo
+      if (currentPeriodEnd === undefined) {
+        const billing = await billingService.getBillingByTenantId(tenantId);
+        const now = new Date();
+
+        // Extiende desde el currentPeriodEnd actual si es futuro, o desde hoy si ya venció
+        const periodStart =
+          billing?.currentPeriodEnd && new Date(billing.currentPeriodEnd) > now
+            ? new Date(billing.currentPeriodEnd)
+            : now;
+
+        const periodEnd = new Date(periodStart);
+        periodEnd.setDate(periodEnd.getDate() + 30);
+
+        payload.currentPeriodStart = periodStart;
+        payload.currentPeriodEnd = periodEnd;
+      }
     } else if (status === "suspended") {
       payload.suspendedAt = new Date();
     }
 
+    // 3. Persistencia
     const updated = await billingService.updateBillingByTenantId(
-      req.tenant.id,
+      tenantId,
       payload,
     );
 
-    invalidateBootstrapCache(req.tenant.id);
+    // 4. Invalida caché de RAM para que la tienda refleje el cambio al instante
+    invalidateBootstrapCache(tenantId);
+
     res.json({ success: true, billing: updated });
   } catch (err) {
     next(err);
