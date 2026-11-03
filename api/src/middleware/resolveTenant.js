@@ -10,13 +10,7 @@ const resolveTenant = async (req, res, next) => {
   try {
     const value =
       req.headers["x-tenant-slug"] || req.body?.slug || req.params?.slug;
-    console.log("[resolveTenant] >>> Entrando al middleware:");
-    console.log("[resolveTenant] URL solicitada:", req.originalUrl);
-    console.log(
-      "[resolveTenant] Header X-Tenant-Slug:",
-      req.headers["x-tenant-slug"],
-    );
-    console.log("[resolveTenant] Value capturado:", value);
+
     if (!value) {
       return res.status(400).json({ error: "X-Tenant-Slug requerido" });
     }
