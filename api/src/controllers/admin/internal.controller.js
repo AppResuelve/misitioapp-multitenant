@@ -413,6 +413,8 @@ const setBillingStatus = async (req, res, next) => {
 };
 
 const registerTenantPayment = async (req, res, next) => {
+  console.log();
+
   try {
     const tenantId = req.tenant.id;
     const billing = await billingService.getBillingByTenantId(tenantId);
