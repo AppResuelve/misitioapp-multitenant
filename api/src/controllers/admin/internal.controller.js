@@ -8,6 +8,9 @@ const {
 } = require("../../models");
 const emailService = require("../../services/admin/email.service");
 const billingService = require("../../services/admin/billing.service");
+const {
+  invalidateBootstrapCache,
+} = require("../../utils/cache/bootstrapCache");
 
 // Helper para asegurar que el adminDomain esté consistente
 const ensureTenantDomain = async (tenant) => {
@@ -374,6 +377,8 @@ const setBillingStatus = async (req, res, next) => {
       req.tenant.id,
       payload,
     );
+
+    invalidateBootstrapCache(req.tenant.id);
     res.json({ success: true, billing: updated });
   } catch (err) {
     next(err);
@@ -404,6 +409,7 @@ const registerTenantPayment = async (req, res, next) => {
       changesThisMonth: 0, // Reset de cuota mensual
     });
 
+    invalidateBootstrapCache(req.tenant.id);
     res.json({ success: true, billing: updated });
   } catch (err) {
     next(err);
