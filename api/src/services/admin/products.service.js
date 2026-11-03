@@ -1342,6 +1342,7 @@ const deleteAllProducts = async (tenantId) => {
     );
 
     // 4. Productos
+
     await sequelize.query(`DELETE FROM products WHERE tenant_id = :tenantId`, {
       replacements: { tenantId },
       type: QueryTypes.DELETE,
